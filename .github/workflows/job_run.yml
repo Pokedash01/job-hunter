@@ -5,6 +5,9 @@ on:
     - cron: '0 */4 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run-engine:
     runs-on: ubuntu-latest
@@ -29,18 +32,20 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install python-jobspy google-genai requests pandas openpyxl
+          pip install python-jobspy google-genai requests pandas openpyxl reportlab
 
-      - name: Execute Pipeline
+      - name: Execute Pipeline & Generate PDFs
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python main.py
 
-      - name: Upload Excel Tracker as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: job_applications_tracker
-          path: job_applications.xlsx
+      - name: Commit and Push Generated PDFs & Excel Tracker
+        run: |
+          git config --global user.name "JobHunterBot"
+          git config --global user.email "bot@users.noreply.github.com"
+          git add generated_docs/ job_applications.xlsx
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Add newly generated resumes, cover letters, and tracker update" && git push)
