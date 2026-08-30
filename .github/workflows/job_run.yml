@@ -24,6 +24,17 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Caches the tracker DB across runs without Git merge conflicts
+      - name: Restore Application Tracking Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            job_tracker.db
+            job_applications.xlsx
+          key: tracker-cache-${{ github.run_id }}
+          restore-keys: |
+            tracker-cache-
+
       - name: Install Dependencies
         run: |
           pip install python-jobspy google-genai requests pandas openpyxl reportlab
@@ -40,21 +51,20 @@ jobs:
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
         run: python main.py
 
-      - name: Commit and Push Generated PDFs & Excel Tracker
+      - name: Commit and Push Generated PDFs
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # Fetch and reconcile remote branch before staging
-          git fetch origin main
+          # Pull latest remote changes first
+          git pull --rebase origin main || true
           
-          # Stage newly generated PDFs, updated tracker, and DB
-          git add -f generated_docs/*.pdf job_applications.xlsx job_tracker.db
+          # Stage PDFs and Excel tracker
+          git add -f generated_docs/*.pdf job_applications.xlsx
           
           if git diff --staged --quiet; then
             echo "No new documents to commit."
           else
-            git commit -m "Auto-archive generated resumes, cover letters, and tracker [skip ci]"
-            # Overwrite binary files with local runner copy to prevent merge conflicts
-            git push origin main || (git pull --rebase -X ours origin main && git push origin main)
+            git commit -m "Auto-archive generated resumes & cover letters [skip ci]"
+            git push origin main
           fi
