@@ -9,7 +9,7 @@ from jobspy import scrape_jobs
 from google import genai
 from google.genai import types
 
-# ReportLab imports for dense, professional layout
+# ReportLab imports for dense, professional PDF generation
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
@@ -115,7 +115,7 @@ def log_job(url, title, company, location, ctc, score, resume_path, cl_path, git
             "Estimated CTC": ctc,
             "Match Score": score,
             "Application Link": url,
-            "Status": "PDFs Generated / Ready to Apply",
+            "Status": "PDFs Dispatched / Ready to Apply",
             "Resume PDF Path": resume_path,
             "Cover Letter PDF Path": cl_path,
             "GitHub Folder Link": github_link
@@ -128,11 +128,9 @@ def log_job(url, title, company, location, ctc, score, resume_path, cl_path, git
 # ----------------- STRICT DOMAIN & SALARY FILTER -----------------
 def is_role_relevant(title: str) -> bool:
     t = title.lower()
-    # Reject excluded domains immediately
     for bad in EXCLUDED_KEYWORDS:
         if re.search(r'\b' + re.escape(bad) + r'\b', t):
             return False
-    # Must contain at least one target domain keyword
     return any(good in t for good in ALLOWED_DOMAINS)
 
 def passes_salary_and_location(location_str, min_sal, max_sal):
@@ -359,8 +357,8 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
     doc.build(story)
 
-# ----------------- TELEGRAM DISPATCHER -----------------
-def send_telegram_alert(title, company, location, url, ctc_label, kit, raw_resume_url, raw_cl_url):
+# ----------------- TELEGRAM DISPATCHER (DIRECT FILE ATTACHMENTS) -----------------
+def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path):
     msg = (
         f"🎯 *New Job Matched for Kartik!*\n\n"
         f"📌 *Role:* {title}\n"
@@ -371,19 +369,39 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, raw_resum
         f"💡 *Why You Match:* {kit.get('reason')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
         f"🔗 [Apply Directly Here]({url})\n\n"
-        f"📂 *Custom Tailored PDFs (Ready to Download & Attach):*\n"
-        f"📄 [Download Full Tailored Resume PDF]({raw_resume_url})\n"
-        f"📝 [Download Tailored Cover Letter PDF]({raw_cl_url})"
+        f"📎 *Attached below:* Tailored 1-page Resume & Cover Letter PDFs ready to upload."
     )
 
-    endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": msg,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": False
-    }
-    requests.post(endpoint, json=payload)
+    msg_endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    doc_endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
+
+    try:
+        # 1. Send text overview
+        requests.post(msg_endpoint, json={
+            "chat_id": CHAT_ID,
+            "text": msg,
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": False
+        })
+
+        # 2. Directly send Tailored Resume PDF file
+        if os.path.exists(resume_path):
+            with open(resume_path, 'rb') as f:
+                requests.post(doc_endpoint, data={
+                    "chat_id": CHAT_ID,
+                    "caption": f"📄 Tailored Resume — {company} ({title})"
+                }, files={"document": f})
+
+        # 3. Directly send Tailored Cover Letter PDF file
+        if os.path.exists(cl_path):
+            with open(cl_path, 'rb') as f:
+                requests.post(doc_endpoint, data={
+                    "chat_id": CHAT_ID,
+                    "caption": f"📝 Tailored Cover Letter — {company}"
+                }, files={"document": f})
+
+    except Exception as e:
+        print(f"Telegram dispatch error: {e}")
 
 # ----------------- MAIN PIPELINE -----------------
 def run():
@@ -451,14 +469,10 @@ def run():
         create_dense_resume(resume_path, kit)
         create_dense_cover_letter(cl_path, title, company, kit)
 
-        # Direct GitHub Raw URLs
-        repo = GITHUB_REPOSITORY if GITHUB_REPOSITORY else "owner/repo"
-        raw_resume_url = f"https://raw.githubusercontent.com/{repo}/main/{DOCS_DIR}/{resume_filename}"
-        raw_cl_url = f"https://raw.githubusercontent.com/{repo}/main/{DOCS_DIR}/{cl_filename}"
-        github_folder_link = f"https://github.com/{repo}/tree/main/{DOCS_DIR}"
+        github_folder_link = f"https://github.com/{GITHUB_REPOSITORY}/tree/main/{DOCS_DIR}"
 
-        # Send alert
-        send_telegram_alert(title, company, location, url, ctc_label, kit, raw_resume_url, raw_cl_url)
+        # Send Telegram alert with PDF files attached
+        send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path)
 
         # Log into SQLite & Excel
         log_job(
@@ -472,7 +486,7 @@ def run():
             cl_path=cl_path,
             github_link=github_folder_link
         )
-        print(f"Generated comprehensive PDFs for: {title} at {company}")
+        print(f"Generated comprehensive PDFs & dispatched files for: {title} at {company}")
 
 if __name__ == "__main__":
     run()
