@@ -24,16 +24,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Restore Application Tracking Cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            job_tracker.db
-            job_applications.xlsx
-          key: tracker-cache-${{ github.run_id }}
-          restore-keys: |
-            tracker-cache-
-
       - name: Install Dependencies
         run: |
           pip install python-jobspy google-genai requests pandas openpyxl reportlab
@@ -55,19 +45,16 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # 1. Fetch latest changes from GitHub
+          # Fetch and reconcile remote branch before staging
           git fetch origin main
           
-          # 2. Stage new PDFs, Excel sheet, and SQLite DB
+          # Stage newly generated PDFs, updated tracker, and DB
           git add -f generated_docs/*.pdf job_applications.xlsx job_tracker.db
           
-          # 3. Commit only if there are changes
           if git diff --staged --quiet; then
             echo "No new documents to commit."
           else
             git commit -m "Auto-archive generated resumes, cover letters, and tracker [skip ci]"
-            
-            # 4. Pull and rebase onto remote main before pushing
-            git pull --rebase origin main
-            git push origin main
+            # Overwrite binary files with local runner copy to prevent merge conflicts
+            git push origin main || (git pull --rebase -X ours origin main && git push origin main)
           fi
