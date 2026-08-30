@@ -413,11 +413,18 @@ def run():
         )
         for _, row in board_jobs.iterrows():
             all_jobs.append(row.to_dict())
+        print(f"[DEBUG] Job boards (LinkedIn/Indeed/Glassdoor) returned {len(board_jobs)} raw listings.")
     except Exception as e:
-        print(f"Scraper error: {e}")
+        print(f"[DEBUG] Scraper error (board jobs came back as 0 because of this): {e}")
 
     ats_jobs = search_enterprise_ats_jobs()
+    print(f"[DEBUG] Enterprise ATS search returned {len(ats_jobs)} raw listings. (SEARCH_API_KEY set: {bool(SEARCH_KEY)})")
     all_jobs.extend(ats_jobs)
+
+    print(f"[DEBUG] Total raw candidates this run: {len(all_jobs)}")
+
+    skip_counts = {"no_url": 0, "already_seen": 0, "irrelevant_title": 0, "salary_or_location": 0}
+    dispatched = 0
 
     for job in all_jobs:
         url = str(job.get('job_url') or '')
@@ -428,13 +435,20 @@ def run():
         max_sal = job.get('max_amount')
         desc = str(job.get('description') or '')
 
-        if not url or url == 'nan' or is_seen(url):
+        if not url or url == 'nan':
+            skip_counts["no_url"] += 1
+            continue
+
+        if is_seen(url):
+            skip_counts["already_seen"] += 1
             continue
 
         if not is_role_relevant(title):
+            skip_counts["irrelevant_title"] += 1
             continue
 
         if not passes_salary_and_location(location, min_sal, max_sal):
+            skip_counts["salary_or_location"] += 1
             continue
 
         ctc_label = f"₹{int(max_sal):,}" if (max_sal and max_sal > 0) else "Meets/Exceeds Location Threshold"
@@ -467,7 +481,16 @@ def run():
             resume_filename=resume_filename,
             cl_filename=cl_filename
         )
+        dispatched += 1
         print(f"Dispatched text alert for: {title} at {company}")
+
+    print(
+        f"[DEBUG] Run summary — dispatched: {dispatched}, "
+        f"skipped no_url: {skip_counts['no_url']}, "
+        f"already_seen: {skip_counts['already_seen']}, "
+        f"irrelevant_title: {skip_counts['irrelevant_title']}, "
+        f"salary_or_location: {skip_counts['salary_or_location']}"
+    )
 
 if __name__ == "__main__":
     run()
