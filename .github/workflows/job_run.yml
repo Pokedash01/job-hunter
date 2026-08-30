@@ -2,7 +2,6 @@ name: 24/7 Job Search & Application Engine
 
 on:
   schedule:
-    # Runs automatically every 4 hours every day
     - cron: '0 */4 * * *'
   workflow_dispatch:
 
@@ -47,18 +46,23 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python main.py
 
       - name: Commit and Push Generated PDFs & Excel Tracker
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Pull latest remote changes first
           git pull origin main --rebase || true
+          
+          # Force-stage all PDFs, Excel tracker, and DB
           git add -f generated_docs/*.pdf job_applications.xlsx job_tracker.db
+          
           if git diff --staged --quiet; then
             echo "No new documents to commit."
           else
             git commit -m "Auto-archive generated resumes, cover letters, and tracker [skip ci]"
+            git pull --rebase origin main
             git push origin main
           fi
