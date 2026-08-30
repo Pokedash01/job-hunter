@@ -348,9 +348,9 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
     doc.build(story)
 
-# ----------------- TELEGRAM DISPATCHER (DIRECT ATTACHMENTS ONLY) -----------------
+# ----------------- TELEGRAM DISPATCHER (1 SINGLE POST PER JOB) -----------------
 def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path):
-    msg = (
+    caption_text = (
         f"🎯 *New Job Matched for Kartik!*\n\n"
         f"📌 *Role:* {title}\n"
         f"🏢 *Company:* {company}\n"
@@ -359,37 +359,39 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
         f"📊 *Fit Score:* {kit.get('match_score')}\n"
         f"💡 *Why You Match:* {kit.get('reason')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
-        f"🔗 [Apply Directly Here]({url})\n\n"
-        f"📎 *Attached below:* Tailored 1-page Resume & Cover Letter PDFs ready to download and upload."
+        f"🔗 [Apply Directly on Portal]({url})\n\n"
+        f"📎 *Attached:* Tailored Resume & Cover Letter PDFs (1-Click Download)"
     )
 
-    msg_endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    doc_endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
+    endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
 
     try:
-        # 1. Send Job Overview Text
-        requests.post(msg_endpoint, json={
-            "chat_id": CHAT_ID,
-            "text": msg,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": False
-        })
-
-        # 2. Upload and send Tailored Resume PDF directly as a document
-        if os.path.exists(resume_path):
-            with open(resume_path, 'rb') as f:
-                requests.post(doc_endpoint, data={
-                    "chat_id": CHAT_ID,
-                    "caption": f"📄 Tailored Resume: {company} ({title})"
-                }, files={"document": f})
-
-        # 3. Upload and send Tailored Cover Letter PDF directly as a document
-        if os.path.exists(cl_path):
-            with open(cl_path, 'rb') as f:
-                requests.post(doc_endpoint, data={
-                    "chat_id": CHAT_ID,
-                    "caption": f"📝 Tailored Cover Letter: {company}"
-                }, files={"document": f})
+        # Open both files simultaneously
+        with open(resume_path, 'rb') as doc1, open(cl_path, 'rb') as doc2:
+            media = [
+                {
+                    "type": "document",
+                    "media": "attach://resume",
+                    "caption": caption_text,
+                    "parse_mode": "Markdown"
+                },
+                {
+                    "type": "document",
+                    "media": "attach://cover_letter"
+                }
+            ]
+            files = {
+                "resume": doc1,
+                "cover_letter": doc2
+            }
+            data = {
+                "chat_id": CHAT_ID,
+                "media": json.dumps(media)
+            }
+            
+            res = requests.post(endpoint, data=data, files=files)
+            if res.status_code != 200:
+                print(f"MediaGroup warning: {res.text}")
 
     except Exception as e:
         print(f"Telegram dispatch error: {e}")
