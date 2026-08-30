@@ -9,7 +9,7 @@ from jobspy import scrape_jobs
 from google import genai
 from google.genai import types
 
-# ReportLab imports for dense, professional PDF generation
+# ReportLab imports for dense, ATS-friendly PDF generation
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
@@ -20,7 +20,6 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 SEARCH_KEY = os.environ.get("SEARCH_API_KEY")
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "")
 
 client = genai.Client(api_key=GEMINI_KEY)
 
@@ -51,7 +50,6 @@ Skills: Copilot Studio, GenAI Agents, Power Apps, Power Automate, Power BI, Shar
 Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate, AI Transformation Leader (AB-731), AI Business Professional (AB-730).
 """
 
-# Strict Domain Rules: Only Product, Operations, Technology
 EXCLUDED_KEYWORDS = [
     "hr", "human resources", "talent acquisition", "recruiter", "recruitment", 
     "sales", "business development executive", "bde", "marketing", "digital marketing", 
@@ -86,7 +84,7 @@ def init_tracker():
         df = pd.DataFrame(columns=[
             "Date Found", "Role Title", "Company", "Location", 
             "Estimated CTC", "Match Score", "Application Link", 
-            "Status", "Resume PDF Path", "Cover Letter PDF Path", "GitHub Folder Link"
+            "Status", "Resume File Name", "Cover Letter File Name"
         ])
         df.to_excel(EXCEL_FILE, index=False)
 
@@ -98,7 +96,7 @@ def is_seen(url):
     conn.close()
     return seen
 
-def log_job(url, title, company, location, ctc, score, resume_path, cl_path, github_link):
+def log_job(url, title, company, location, ctc, score, resume_filename, cl_filename):
     conn = sqlite3.connect("job_tracker.db")
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO seen_jobs (url, title, company) VALUES (?, ?, ?)", (url, title, company))
@@ -115,10 +113,9 @@ def log_job(url, title, company, location, ctc, score, resume_path, cl_path, git
             "Estimated CTC": ctc,
             "Match Score": score,
             "Application Link": url,
-            "Status": "PDFs Dispatched / Ready to Apply",
-            "Resume PDF Path": resume_path,
-            "Cover Letter PDF Path": cl_path,
-            "GitHub Folder Link": github_link
+            "Status": "PDFs Attached in Telegram / Saved in Repo",
+            "Resume File Name": resume_filename,
+            "Cover Letter File Name": cl_filename
         }
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         df.to_excel(EXCEL_FILE, index=False)
@@ -186,7 +183,7 @@ def search_enterprise_ats_jobs():
             
     return discovered
 
-# ----------------- GEMINI TAILORED ASSET GENERATOR -----------------
+# ----------------- GEMINI ASSET GENERATION -----------------
 def generate_application_kit(title, company, description):
     prompt = f"""
     You are an expert executive resume writer and career strategist tailoring application documents for Kartik Bhatt.
@@ -281,23 +278,19 @@ def create_dense_resume(filepath, kit):
     subhead_style = ParagraphStyle('SubHead', parent=styles['Normal'], fontSize=8.5, leading=10.5, fontName='Helvetica-Bold', textColor=colors.HexColor("#334155"), leftIndent=6)
     bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'], fontSize=8, leading=10.5, leftIndent=12, textColor=colors.HexColor("#1E293B"))
 
-    # Header
     story.append(Paragraph("<b>KARTIK BHATT</b>", name_style))
     story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | LinkedIn | Website: https://kartikb.vercel.app/ | Delhi NCR, India", contact_style))
     story.append(Spacer(1, 3))
     story.append(HRFlowable(width="100%", thickness=0.75, color=colors.HexColor("#94A3B8"), spaceAfter=3))
 
-    # Professional Summary
     story.append(Paragraph("<b>PROFESSIONAL SUMMARY</b>", section_style))
     story.append(Paragraph(kit.get("tailored_summary", ""), body_style))
     story.append(Spacer(1, 3))
 
-    # Education
     story.append(Paragraph("<b>EDUCATION</b>", section_style))
     story.append(Paragraph("<b>Maharaja Surajmal Institute</b> | Bachelor of Computer Applications (Computer Science) | <b>GPA: 9.3/10 (Top 1%)</b>", body_style))
     story.append(Spacer(1, 3))
 
-    # Experience
     story.append(Paragraph("<b>WORK EXPERIENCE</b>", section_style))
     story.append(Paragraph("<b>KPMG</b> | Analyst — Knowledge Management | Gurugram <i>(May 2024 – Present | 3 yrs 2 mos total exp)</i>", company_style))
     story.append(Paragraph("<i>Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management & business development.</i>", body_style))
@@ -318,7 +311,6 @@ def create_dense_resume(filepath, kit):
         story.append(Paragraph(f"• {b}", bullet_style))
     story.append(Spacer(1, 3))
 
-    # Skills & Certifications
     story.append(Paragraph("<b>SKILLS & CERTIFICATIONS</b>", section_style))
     story.append(Paragraph("<b>Skills:</b> Copilot GenAI (Agents), Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL", body_style))
     story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Certified Foundations Associate | AI Transformation Leader (AB-731) | AI Business Professional (AB-730)", body_style))
@@ -335,7 +327,6 @@ def create_dense_cover_letter(filepath, title, company, kit):
     subj_style = ParagraphStyle('Subj', parent=styles['Normal'], fontSize=10, leading=13, fontName='Helvetica-Bold', textColor=colors.HexColor("#0F2942"), spaceBefore=6, spaceAfter=6)
     body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=9.5, leading=14, spaceBefore=6, textColor=colors.HexColor("#1E293B"))
 
-    # Header
     story.append(Paragraph("<b>KARTIK BHATT</b>", name_style))
     story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | LinkedIn | Portfolio: https://kartikb.vercel.app/", contact_style))
     story.append(Spacer(1, 4))
@@ -357,7 +348,7 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
     doc.build(story)
 
-# ----------------- TELEGRAM DISPATCHER (DIRECT FILE ATTACHMENTS) -----------------
+# ----------------- TELEGRAM DISPATCHER (DIRECT ATTACHMENTS ONLY) -----------------
 def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path):
     msg = (
         f"🎯 *New Job Matched for Kartik!*\n\n"
@@ -369,14 +360,14 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
         f"💡 *Why You Match:* {kit.get('reason')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
         f"🔗 [Apply Directly Here]({url})\n\n"
-        f"📎 *Attached below:* Tailored 1-page Resume & Cover Letter PDFs ready to upload."
+        f"📎 *Attached below:* Tailored 1-page Resume & Cover Letter PDFs ready to download and upload."
     )
 
     msg_endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     doc_endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
 
     try:
-        # 1. Send text overview
+        # 1. Send Job Overview Text
         requests.post(msg_endpoint, json={
             "chat_id": CHAT_ID,
             "text": msg,
@@ -384,20 +375,20 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
             "disable_web_page_preview": False
         })
 
-        # 2. Directly send Tailored Resume PDF file
+        # 2. Upload and send Tailored Resume PDF directly as a document
         if os.path.exists(resume_path):
             with open(resume_path, 'rb') as f:
                 requests.post(doc_endpoint, data={
                     "chat_id": CHAT_ID,
-                    "caption": f"📄 Tailored Resume — {company} ({title})"
+                    "caption": f"📄 Tailored Resume: {company} ({title})"
                 }, files={"document": f})
 
-        # 3. Directly send Tailored Cover Letter PDF file
+        # 3. Upload and send Tailored Cover Letter PDF directly as a document
         if os.path.exists(cl_path):
             with open(cl_path, 'rb') as f:
                 requests.post(doc_endpoint, data={
                     "chat_id": CHAT_ID,
-                    "caption": f"📝 Tailored Cover Letter — {company}"
+                    "caption": f"📝 Tailored Cover Letter: {company}"
                 }, files={"document": f})
 
     except Exception as e:
@@ -408,7 +399,6 @@ def run():
     init_tracker()
     all_jobs = []
 
-    # 1. Scrape standard boards with targeted queries
     try:
         board_jobs = scrape_jobs(
             site_name=["linkedin", "indeed", "glassdoor"],
@@ -423,11 +413,9 @@ def run():
     except Exception as e:
         print(f"Scraper error: {e}")
 
-    # 2. Search enterprise ATS
     ats_jobs = search_enterprise_ats_jobs()
     all_jobs.extend(ats_jobs)
 
-    # 3. Process jobs
     for job in all_jobs:
         url = str(job.get('job_url') or '')
         title = str(job.get('title') or '')
@@ -440,21 +428,16 @@ def run():
         if not url or url == 'nan' or is_seen(url):
             continue
 
-        # Enforce strict domain relevance (No HR/Sales/Marketing)
         if not is_role_relevant(title):
-            print(f"Skipping irrelevant domain: {title}")
             continue
 
-        # Enforce CTC and Location rules
         if not passes_salary_and_location(location, min_sal, max_sal):
             continue
 
         ctc_label = f"₹{int(max_sal):,}" if (max_sal and max_sal > 0) else "Meets/Exceeds Location Threshold"
 
-        # Generate Tailored Assets via Gemini
         kit = generate_application_kit(title, company, desc)
 
-        # Generate Safe File Names
         safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:15]
         safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)[:15]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -465,16 +448,11 @@ def run():
         resume_path = os.path.join(DOCS_DIR, resume_filename)
         cl_path = os.path.join(DOCS_DIR, cl_filename)
 
-        # Build Full Dense PDFs
         create_dense_resume(resume_path, kit)
         create_dense_cover_letter(cl_path, title, company, kit)
 
-        github_folder_link = f"https://github.com/{GITHUB_REPOSITORY}/tree/main/{DOCS_DIR}"
-
-        # Send Telegram alert with PDF files attached
         send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path)
 
-        # Log into SQLite & Excel
         log_job(
             url=url,
             title=title,
@@ -482,11 +460,10 @@ def run():
             location=location,
             ctc=ctc_label,
             score=kit.get("match_score"),
-            resume_path=resume_path,
-            cl_path=cl_path,
-            github_link=github_folder_link
+            resume_filename=resume_filename,
+            cl_filename=cl_filename
         )
-        print(f"Generated comprehensive PDFs & dispatched files for: {title} at {company}")
+        print(f"Dispatched direct attachments for: {title} at {company}")
 
 if __name__ == "__main__":
     run()
