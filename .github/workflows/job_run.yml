@@ -9,8 +9,7 @@ on:
 permissions:
   contents: write
 
-# Prevents two runs from racing to push the same binary files (xlsx/db) at once,
-# which is what caused the "Cannot merge binary files" rebase conflict.
+# Prevents two runs from racing to push at once.
 concurrency:
   group: job-hunter-engine
   cancel-in-progress: false
@@ -30,7 +29,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Caches the tracker DB across runs without Git merge conflicts
+      # job_tracker.db and job_applications.xlsx live ONLY here across runs.
+      # They are intentionally .gitignore'd below and never committed to git,
+      # so they can never conflict with git history (including if someone
+      # deletes them from the repo on GitHub — the cache is independent of that).
       - name: Restore Application Tracking Cache
         uses: actions/cache@v4
         with:
@@ -49,18 +51,15 @@ jobs:
         run: |
           mkdir -p generated_docs
 
-      # Sync to the very latest main BEFORE generating any new files.
-      # This is the key fix: previously the workflow fetched main, THEN ran the
-      # pipeline, THEN committed, and only pulled/rebased at the end — by which
-      # point another run may have already pushed a newer xlsx/db, causing a
-      # binary merge conflict that git can't auto-resolve. Resetting first means
-      # every run starts from a clean, current baseline.
       - name: Sync to Latest Main
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git reset --hard origin/main
+          # reset --hard only touches TRACKED files — job_tracker.db and
+          # job_applications.xlsx are untracked/ignored, so the cache-restored
+          # copies above survive this step untouched.
 
       - name: Execute Pipeline & Generate PDFs
         env:
@@ -72,17 +71,16 @@ jobs:
 
       - name: Commit and Push Generated PDFs
         run: |
-          # Stage PDFs, Excel tracker, and the SQLite tracker DB
-          git add -f generated_docs/*.pdf job_applications.xlsx job_tracker.db
+          # Only the PDFs are git-tracked. Each filename is unique
+          # (company + role + timestamp), so this is always a pure
+          # "add new file" — never a modify or delete — meaning it
+          # can never produce a merge/rebase conflict.
+          git add -f generated_docs/*.pdf
 
           if git diff --staged --quiet; then
             echo "No new documents to commit."
           else
-            git commit -m "Auto-archive generated resumes, cover letters, and tracker [skip ci]"
-
-            # Fallback safety net: if another run somehow snuck a push in during
-            # this job, prefer OUR freshly generated files on conflict rather
-            # than failing the whole run.
-            git pull --rebase -X theirs origin main
+            git commit -m "Auto-archive generated resumes & cover letters [skip ci]"
+            git pull --rebase origin main
             git push origin main
           fi
