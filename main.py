@@ -65,6 +65,17 @@ EXCEL_FILE = "job_applications.xlsx"
 DOCS_DIR = "generated_docs"
 os.makedirs(DOCS_DIR, exist_ok=True)
 
+# ----------------- GITHUB LINK CONFIG -----------------
+# Used to build direct download links to the PDFs once they're pushed to the repo
+# by the "Commit and Push" step at the end of the workflow run.
+GITHUB_REPO = "Pokedash01/job-hunter"
+GITHUB_BRANCH = "main"
+
+def github_raw_link(local_path: str) -> str:
+    """Builds a raw.githubusercontent.com direct-download link for a file in this repo."""
+    clean_path = local_path.replace(os.sep, "/").lstrip("./")
+    return f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{clean_path}"
+
 # ----------------- STORAGE ENGINE -----------------
 def init_tracker():
     conn = sqlite3.connect("job_tracker.db")
@@ -355,6 +366,9 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
     safe_company = company.replace("*", "").replace("_", " ")
     safe_location = location.replace("*", "").replace("_", " ")
 
+    resume_link = github_raw_link(resume_path)
+    cl_link = github_raw_link(cl_path)
+
     caption_text = (
         f"🎯 *New Job Matched for Kartik!*\n\n"
         f"📌 *Role:* {safe_title}\n"
@@ -364,8 +378,11 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
         f"📊 *Fit Score:* {kit.get('match_score')}\n"
         f"💡 *Why You Match:* {kit.get('reason')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
-        f"🔗 [Apply Directly on Portal]({url})\n\n"
-        f"📎 *Attached:* Tailored Resume & Cover Letter PDFs (1-Click Download)"
+        f"🔗 [Apply Directly on Portal]({url})\n"
+        f"📄 [Download Resume PDF]({resume_link})\n"
+        f"📝 [Download Cover Letter PDF]({cl_link})\n\n"
+        f"📎 *Attached:* Tailored Resume & Cover Letter PDFs (also usable directly below)\n"
+        f"_Links go live within ~1 min, once this run archives the PDFs to the repo._"
     )
 
     endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
