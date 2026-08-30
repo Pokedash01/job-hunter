@@ -9,7 +9,7 @@ from jobspy import scrape_jobs
 from google import genai
 from google.genai import types
 
-# ReportLab imports for dense, ATS-friendly PDF generation
+# ReportLab imports for dense, professional PDF generation
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
@@ -122,7 +122,7 @@ def log_job(url, title, company, location, ctc, score, resume_filename, cl_filen
     except Exception as e:
         print(f"Excel logging error: {e}")
 
-# ----------------- STRICT DOMAIN & SALARY FILTER -----------------
+# ----------------- DOMAIN & SALARY FILTER -----------------
 def is_role_relevant(title: str) -> bool:
     t = title.lower()
     for bad in EXCLUDED_KEYWORDS:
@@ -348,13 +348,18 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
     doc.build(story)
 
-# ----------------- TELEGRAM DISPATCHER (1 SINGLE POST PER JOB) -----------------
+# ----------------- TELEGRAM DISPATCHER (1 SINGLE COMPACT POST) -----------------
 def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path):
+    # Escape Markdown characters in text variables to prevent parsing issues
+    safe_title = title.replace("*", "").replace("_", " ")
+    safe_company = company.replace("*", "").replace("_", " ")
+    safe_location = location.replace("*", "").replace("_", " ")
+
     caption_text = (
         f"🎯 *New Job Matched for Kartik!*\n\n"
-        f"📌 *Role:* {title}\n"
-        f"🏢 *Company:* {company}\n"
-        f"📍 *Location:* {location}\n"
+        f"📌 *Role:* {safe_title}\n"
+        f"🏢 *Company:* {safe_company}\n"
+        f"📍 *Location:* {safe_location}\n"
         f"💰 *CTC Check:* {ctc_label}\n"
         f"📊 *Fit Score:* {kit.get('match_score')}\n"
         f"💡 *Why You Match:* {kit.get('reason')}\n"
@@ -366,13 +371,12 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
     endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
 
     try:
-        # Open both files simultaneously
         with open(resume_path, 'rb') as doc1, open(cl_path, 'rb') as doc2:
             media = [
                 {
                     "type": "document",
                     "media": "attach://resume",
-                    "caption": caption_text,
+                    "caption": caption_text[:1024],  # Telegram caption character limit safe
                     "parse_mode": "Markdown"
                 },
                 {
@@ -381,17 +385,16 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
                 }
             ]
             files = {
-                "resume": doc1,
-                "cover_letter": doc2
+                "resume": (os.path.basename(resume_path), doc1, 'application/pdf'),
+                "cover_letter": (os.path.basename(cl_path), doc2, 'application/pdf')
             }
             data = {
                 "chat_id": CHAT_ID,
                 "media": json.dumps(media)
             }
-            
             res = requests.post(endpoint, data=data, files=files)
             if res.status_code != 200:
-                print(f"MediaGroup warning: {res.text}")
+                print(f"Telegram media group warning: {res.text}")
 
     except Exception as e:
         print(f"Telegram dispatch error: {e}")
@@ -453,6 +456,7 @@ def run():
         create_dense_resume(resume_path, kit)
         create_dense_cover_letter(cl_path, title, company, kit)
 
+        # Dispatches 1 single compact post with both PDFs
         send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path)
 
         log_job(
@@ -465,7 +469,7 @@ def run():
             resume_filename=resume_filename,
             cl_filename=cl_filename
         )
-        print(f"Dispatched direct attachments for: {title} at {company}")
+        print(f"Dispatched single bundled post for: {title} at {company}")
 
 if __name__ == "__main__":
     run()
