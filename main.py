@@ -27,27 +27,40 @@ client = genai.Client(api_key=GEMINI_KEY)
 KARTIK_PROFILE = """
 Candidate: Kartik Bhatt
 Contact: kb270102@gmail.com | +91-7428062532 | Portfolio: https://kartikb.vercel.app/
-Education: Bachelor of Computer Applications, Maharaja Surajmal Institute (Computer Science) | GPA: 9.3/10 (Top 1%)
+Education: Bachelor of Computer Applications, Majors: Computer Science, Maharaja Surajmal Institute | GPA: 9.3/10 (Top 1%) | Jul 2019 - Aug 2022
 
 Experience Summary: ~3.5+ years of cross-functional experience across KPMG and GlobalLogic driving process automation, Copilot/GenAI agents, Power Platform solutions, and operational excellence.
 
 Work Experience:
 1. KPMG | Analyst | Knowledge Management | Gurugram (May 2024 - Present)
-   - Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management.
-   - Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30 member firms, saving 1,200 hrs annually.
-   - Automated migration of old Excel-based data collection for 45+ pillars to automated SPO lists with permission governance & alerts.
-   - Built & managed VBA macro solutions refreshing 30,000+ assets globally, saving 485 hrs annually.
-   - Architected multi-modal Copilot agent for messy data, field drafting, and metadata tagging, saving 325 hrs annually.
-   - Overall saved 2,000+ hrs annually across Power Platform, Copilot Studio, and VBA. Handled 100+ RFP/RFI requests.
-   - Awards: KUDOS (efficiency & Lean Six Sigma), Super Team Award, Ally of Inclusion, Gurus@Work.
+   Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management and played a key role in business development.
 
-2. GlobalLogic Technologies | Associate Analyst | Content Engineering | Gurugram (Sep 2022 - Oct 2023)
-   - Created best practices, process docs, and QA processes for Google project to build test & training datasets for GenAI screen search on Android.
-   - Piloted project to extract answers from multi-level docs for AI training datasets.
-   - Improved onshore project delivery quality from 74% to 95%; QA'd 500+ pieces weekly and led 3 pilot projects.
+   Key Projects:
+   - Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.
+   - Built end-to-end solution to facilitate migration of old Excel-based data collection for 45+ pillars to automated SPO list integration, including 3 Power Automate flows for alerts, change management, data migration, and permission governance.
+   - Built & managed multiple VBA macro solutions refreshing a repository of 30,000+ assets globally, including change management, saving 485 hrs annually.
+   - Architected a multi-modal Copilot agent to assist with messy data, draft fields, and apply metadata tags based on source and guidelines, saving 325 hrs annually.
 
-Skills: Copilot Studio, GenAI Agents, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL.
-Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate, AI Transformation Leader (AB-731), AI Business Professional (AB-730).
+   Business Development & Operations:
+   - Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.
+   - Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages per brand values and standards.
+   - Undertook complete contact management system administration for 10,000+ KGS members.
+   - Uploaded 5,000+ content assets across 3 content types and 15 libraries.
+   - Performed Audit Market Share (AMS) analysis for 6+ sectors.
+   - Catered to 50+ SharePoint governance and administration requests, including term store management, change management, metadata management, and permission-level management.
+
+   Awards: KUDOS (efficiency & Lean Six Sigma, saving 2,000+ hrs annually), KUDOS (migrating legacy VBA/Excel practices to GenAI-focused agent + Power Platform workflows), Super Team Award (hosting/organizing employee council events), Ally of Inclusion, Gurus@Work (contributions to learning culture).
+
+2. GlobalLogic Technologies Private Limited | Associate Analyst | Content Engineering | Gurugram (Sep 2022 - Oct 2023)
+   Took part in content generation and manipulation projects for clients including Google.
+   - Created best practices, process docs, and QA processes for a Google project to build test & training datasets for GenAI screen search on Android.
+   - Piloted a project to extract relevant answers from multi-level docs to build a training dataset for AI.
+   - Designed and implemented QA processes for data entry, reducing errors by 25% and improving data accuracy.
+   - Managed process documentation for 10+ projects, ensuring compliance and accessibility for stakeholders.
+   - Improved onshore project delivery quality from 74% to 95%; QA'd 500+ pieces weekly and led 3 pilot projects, securing all of them against competition from major MNCs.
+
+Skills: Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL, MySQL, Process Automation, Stakeholder Management, Product/Data Analytics, RFP/RFI Management, Change Management, Digital Transformation.
+Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Microsoft Certified: AI Transformation Leader (AB-731), Microsoft Certified: AI Business Professional (AB-730), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate.
 """
 
 EXCLUDED_KEYWORDS = [
@@ -197,44 +210,65 @@ def search_enterprise_ats_jobs():
 # ----------------- GEMINI ASSET GENERATION -----------------
 def generate_application_kit(title, company, description):
     prompt = f"""
-    You are an expert executive resume writer and career strategist tailoring application documents for Kartik Bhatt.
+    You are an expert executive resume writer, ATS optimization specialist, and career strategist
+    tailoring application documents for Kartik Bhatt.
 
-    Candidate Profile:
+    Candidate Profile (ground truth — do not invent achievements outside this):
     {KARTIK_PROFILE}
 
     Target Job Opening:
     Title: {title}
     Company: {company}
-    JD Snippet: {description[:1600]}
+    JD Snippet: {description[:2200]}
 
-    Generate tailored, rich, and dense content for both a 1-page full Resume and a comprehensive Cover Letter.
+    TASK:
+    1. Read the JD Snippet carefully and extract 10-15 exact keywords/phrases an ATS (Applicant
+       Tracking System) would scan for — tools, methodologies, certifications, soft skills, domain
+       terms (e.g. "stakeholder management", "SQL", "process automation", "Power BI", "Agile").
+       Only include a keyword if Kartik's real profile genuinely supports it — never fabricate a
+       skill he doesn't have.
+    2. Naturally weave as many of those keywords as possible into the summary, bullets, and cover
+       letter, using their exact JD phrasing where it matches something true about Kartik, so both
+       a human reviewer and an ATS keyword scan register a strong match.
+    3. Write DETAILED, dense, quantified bullets (not generic one-liners) — every bullet should
+       include a concrete number, tool, or outcome, pulled from the Candidate Profile above.
+    4. Write a substantive 4-paragraph cover letter (not 3) that: (a) opens with the role + a
+       specific hook tied to the company's mission/product from the JD, (b) proves fit with 2-3
+       concrete KPMG achievements, (c) proves fit with GlobalLogic experience + tools, (d) closes
+       by connecting his profile to what the company is building, referencing the company by name.
 
     Return ONLY a valid JSON object matching this exact schema:
     {{
         "match_score": "e.g., 94%",
         "reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
         "skills_gap": "Any missing tool/skill or 'None'",
-        "tailored_summary": "A comprehensive 3-4 line Professional Summary showcasing 3.5+ years of experience across KPMG and GlobalLogic, tailored directly to {title}.",
+        "ats_keywords": ["keyword1", "keyword2", "... 10-15 exact JD-relevant keywords Kartik genuinely supports"],
+        "tailored_summary": "A comprehensive 4-5 line Professional Summary showcasing 3.5+ years of experience across KPMG and GlobalLogic, naturally including several ats_keywords, tailored directly to {title} at {company}.",
         "kpmg_project_bullets": [
-            "Tailored bullet 1 detailing Power Platform solution for 20,000 reach outs and 1,200 hrs saved, framed for {title}",
-            "Tailored bullet 2 detailing end-to-end SPO migration for 45+ pillars and governance",
-            "Tailored bullet 3 detailing global VBA macro repository automation for 30,000+ assets saving 485 hrs",
-            "Tailored bullet 4 detailing multi-modal Copilot Agent for metadata and messy data saving 325 hrs"
+            "Detailed, quantified bullet on the Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved, framed for {title}",
+            "Detailed bullet on the SPO migration: 45+ pillars, 3 Power Automate flows, change management, permission governance",
+            "Detailed bullet on the VBA macro repository automation: 30,000+ assets, 485 hrs saved",
+            "Detailed bullet on the multi-modal Copilot agent: messy data cleanup, field drafting, metadata tagging, 325 hrs saved",
+            "Detailed bullet on contact management system administration for 10,000+ members and 5,000+ content assets across 15 libraries"
         ],
         "kpmg_bd_bullets": [
             "Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.",
-            "Catered to 100+ RFP/RFI requests and built 100+ internal site pages aligned with enterprise brand guidelines.",
-            "Administered contact management system for 10,000+ members and uploaded 5,000+ content assets."
+            "Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages aligned with enterprise brand guidelines.",
+            "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
+            "Catered to 50+ SharePoint governance and administration requests spanning term store, metadata, and permission-level management."
         ],
         "globallogic_bullets": [
-            "Designed best practices, process docs, and QA workflows for Google GenAI datasets for Android screen search.",
-            "Managed process documentation across 10+ engagements, improving project delivery quality from 74% to 95%."
+            "Designed best practices, process docs, and QA workflows for a Google GenAI dataset project used for Android screen search.",
+            "Designed and implemented QA processes for data entry, reducing errors by 25% and improving data accuracy.",
+            "Managed process documentation across 10+ engagements, improving onshore project delivery quality from 74% to 95%.",
+            "QA'd 500+ pieces weekly and led 3 pilot projects to successful completion against competition from major MNCs."
         ],
         "cover_letter_subject": "Subject: Driving Operational Excellence & Scalable Solutions as {title}",
         "cover_letter_paragraphs": [
-            "I am writing to express my strong enthusiasm for the {title} position at {company}. With over 3.5 years of experience across KPMG and GlobalLogic, I have specialized in building scalable automation frameworks, leveraging Microsoft Copilot and Power Platform ecosystems, and driving data-backed operational efficiencies. My background aligns directly with {company}'s focus on innovation and execution.",
-            "In my current role at KPMG, I lead cross-functional initiatives across 13 sectors, managing 360-degree stakeholder relationships and translating complex business requirements into high-impact digital solutions. I architected end-to-end Power Platform systems that streamlined 20,000 annual interactions and built multi-modal Copilot agents that saved over 2,000 hours annually. Additionally, during my tenure at GlobalLogic, I established quality assurance frameworks for Google's GenAI training datasets, elevating project benchmark delivery from 74% to 95%.",
-            "I am excited about the opportunity to bring my hands-on technical skills in Copilot Studio, Power Platform, and SQL, coupled with Lean Six Sigma methodologies, to accelerate outcomes for {company}. Thank you for considering my application. I look forward to discussing how my experience can deliver measurable value to your team."
+            "Opening paragraph: enthusiasm for {title} at {company}, a specific hook tied to {company}'s mission or product from the JD, and a 1-line summary of the 3.5+ year KPMG/GlobalLogic background.",
+            "Second paragraph: 2-3 concrete, quantified KPMG achievements (Power Platform, Copilot agents, hours saved) mapped directly to what the JD is asking for.",
+            "Third paragraph: GlobalLogic experience — QA frameworks for Google's GenAI datasets, project quality lift from 74% to 95% — mapped to relevant JD requirements.",
+            "Closing paragraph: connect Kartik's skill set explicitly to {company}'s goals/products as described in the JD, restate enthusiasm, thank the reader, and invite next steps."
         ]
     }}
     """
@@ -251,27 +285,37 @@ def generate_application_kit(title, company, description):
             "match_score": "High Match",
             "reason": "Strong alignment with Kartik's Power Platform, GenAI agent building, and operations leadership background.",
             "skills_gap": "None",
-            "tailored_summary": f"Analytical and solutions-driven professional with 3.5+ years of experience across KPMG and GlobalLogic specializing in Power Platform automation, Copilot AI agents, and cross-functional operations tailored for the {title} role.",
+            "ats_keywords": [
+                "Power Platform", "Power Automate", "Power BI", "Power Apps", "Copilot Studio",
+                "GenAI Agents", "SQL", "Process Automation", "Stakeholder Management",
+                "Change Management", "SharePoint Online", "Data Analytics", "RFP/RFI Management"
+            ],
+            "tailored_summary": f"Analytical and solutions-driven professional with 3.5+ years of experience across KPMG and GlobalLogic specializing in Power Platform automation, Copilot AI agents, SQL-driven data analytics, and cross-functional stakeholder management, tailored for the {title} role at {company}.",
             "kpmg_project_bullets": [
-                "Built complete Power Platform solution facilitating 20,000 reach outs annually across 13 sectors, saving 1,200 hrs annually.",
-                "Automated migration of data collection for 45+ pillars to automated SPO lists with change management and permissions.",
-                "Developed VBA macro solutions for 30,000+ assets globally, saving 485 hrs annually.",
-                "Built multi-modal Copilot agent to clean messy data and apply metadata tags, saving 325 hrs annually."
+                "Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.",
+                "Built end-to-end migration of Excel-based data collection for 45+ pillars to automated SPO lists, including 3 Power Automate flows for alerts, change management, and permission governance.",
+                "Built & managed VBA macro solutions refreshing 30,000+ assets globally, saving 485 hrs annually.",
+                "Architected a multi-modal Copilot agent for messy data cleanup, field drafting, and metadata tagging, saving 325 hrs annually.",
+                "Administered contact management system for 10,000+ members and uploaded 5,000+ content assets across 15 libraries."
             ],
             "kpmg_bd_bullets": [
                 "Saved 2,000+ hrs annually across Power Platform, Copilot Studio, and VBA Macros.",
-                "Catered to 100+ RFP and RFI requests and 100+ internal site pages according to brand standards.",
-                "Administered contact management system for 10,000+ members and managed 50+ SharePoint governance requests."
+                "Handled 100+ RFP/RFI requests and maintained 100+ internal site pages per brand standards.",
+                "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
+                "Catered to 50+ SharePoint governance and administration requests including permission-level management."
             ],
             "globallogic_bullets": [
-                "Created best practices and QA processes for Google GenAI training datasets for Android screen search.",
-                "Improved project delivery quality from 74% to 95%, managing process documentation for 10+ projects."
+                "Created best practices and QA processes for a Google GenAI training dataset project for Android screen search.",
+                "Reduced data entry errors by 25% through redesigned QA processes.",
+                "Improved project delivery quality from 74% to 95%, managing process documentation for 10+ projects.",
+                "QA'd 500+ pieces weekly and led 3 pilot projects to completion against major MNC competition."
             ],
             "cover_letter_subject": f"Subject: Application for {title} - Kartik Bhatt",
             "cover_letter_paragraphs": [
-                f"I am excited to apply for the {title} position at {company}. With over 3.5 years of experience at KPMG and GlobalLogic, I specialize in process automation, Power Platform ecosystems, and Copilot AI agents.",
-                "At KPMG, I architected automation systems that saved over 2,000 hours annually and led migrations across 45 pillars. At GlobalLogic, I engineered QA frameworks for Google's GenAI datasets, lifting project quality from 74% to 95%.",
-                f"I look forward to bringing this operational and technical expertise to {company} to drive scalable outcomes."
+                f"I am excited to apply for the {title} position at {company}. With over 3.5 years of experience at KPMG and GlobalLogic, I specialize in process automation, Power Platform ecosystems, and Copilot AI agents, and I'm eager to bring that background to your team.",
+                "At KPMG, I built a complete Power Platform solution driving 20,000 reach outs annually across 13 sectors, architected a multi-modal Copilot agent that saved 325 hrs annually, and led migrations across 45+ pillars — saving over 2,000 hrs annually in total.",
+                "At GlobalLogic, I engineered QA frameworks for Google's GenAI training datasets, lifting onshore project delivery quality from 74% to 95% while QA'ing 500+ pieces weekly across 10+ projects.",
+                f"I would welcome the opportunity to bring this operational and technical expertise to {company} and help drive measurable, scalable outcomes for your team. Thank you for your time and consideration — I look forward to the possibility of discussing this further."
             ]
         }
 
@@ -298,6 +342,12 @@ def create_dense_resume(filepath, kit):
     story.append(Paragraph(kit.get("tailored_summary", ""), body_style))
     story.append(Spacer(1, 3))
 
+    ats_keywords = kit.get("ats_keywords", [])
+    if ats_keywords:
+        story.append(Paragraph("<b>CORE COMPETENCIES</b>", section_style))
+        story.append(Paragraph(" • ".join(ats_keywords), body_style))
+        story.append(Spacer(1, 3))
+
     story.append(Paragraph("<b>EDUCATION</b>", section_style))
     story.append(Paragraph("<b>Maharaja Surajmal Institute</b> | Bachelor of Computer Applications (Computer Science) | <b>GPA: 9.3/10 (Top 1%)</b>", body_style))
     story.append(Spacer(1, 3))
@@ -314,7 +364,7 @@ def create_dense_resume(filepath, kit):
     for b in kit.get("kpmg_bd_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
     
-    story.append(Paragraph("Key Achievements: Awarded 'KUDOS' (Lean Six Sigma saving 2,000+ hrs), 'Super Team', 'Ally of Inclusion', and 'Gurus@Work'.", bullet_style))
+    story.append(Paragraph("Key Achievements: Awarded 'KUDOS' twice — for Lean Six Sigma efficiency (2,000+ hrs saved) and for migrating legacy VBA/Excel practices to GenAI agents & Power Platform — plus 'Super Team', 'Ally of Inclusion', and 'Gurus@Work'.", bullet_style))
     story.append(Spacer(1, 3))
 
     story.append(Paragraph("<b>GlobalLogic Technologies Private Limited</b> | Associate Analyst — Content Engineering | Gurugram <i>(Sep 2022 – Oct 2023)</i>", company_style))
@@ -323,8 +373,8 @@ def create_dense_resume(filepath, kit):
     story.append(Spacer(1, 3))
 
     story.append(Paragraph("<b>SKILLS & CERTIFICATIONS</b>", section_style))
-    story.append(Paragraph("<b>Skills:</b> Copilot GenAI (Agents), Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL", body_style))
-    story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Certified Foundations Associate | AI Transformation Leader (AB-731) | AI Business Professional (AB-730)", body_style))
+    story.append(Paragraph("<b>Skills:</b> Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL, MySQL, Process Automation, Change Management, Stakeholder Management, Product/Data Analytics, RFP/RFI Management, Digital Transformation", body_style))
+    story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Microsoft Certified: AI Transformation Leader (AB-731) | Microsoft Certified: AI Business Professional (AB-730) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Certified Foundations Associate", body_style))
 
     doc.build(story)
 
@@ -370,6 +420,7 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
     cl_link = github_raw_link(cl_path)
 
     message_text = (
+        f"🎯 *New Job Matched for Kartik!*\n\n"
         f"📌 *Role:* {safe_title}\n"
         f"🏢 *Company:* {safe_company}\n"
         f"📍 *Location:* {safe_location}\n"
@@ -379,6 +430,7 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
         f"🔗 [Apply Directly on Portal]({url})\n"
         f"📄 [Download Resume PDF]({resume_link})\n"
         f"📝 [Download Cover Letter PDF]({cl_link})\n\n"
+        f"_Links go live within ~1 min, once this run archives the PDFs to the repo._"
     )
 
     endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -445,10 +497,12 @@ def run():
 
         if not is_role_relevant(title):
             skip_counts["irrelevant_title"] += 1
+            print(f"[DEBUG] Rejected (irrelevant_title): '{title}' @ {company}")
             continue
 
         if not passes_salary_and_location(location, min_sal, max_sal):
             skip_counts["salary_or_location"] += 1
+            print(f"[DEBUG] Rejected (salary_or_location): '{title}' @ {company} | loc={location} min={min_sal} max={max_sal}")
             continue
 
         ctc_label = f"₹{int(max_sal):,}" if (max_sal and max_sal > 0) else "Meets/Exceeds Location Threshold"
