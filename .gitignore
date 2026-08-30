@@ -1,0 +1,11 @@
+# State files persisted via actions/cache only — never git-tracked.
+# (This is required: git-tracking these caused repeated modify/delete
+# and binary-merge conflicts every time the workflow ran twice or a file
+# was manually deleted on GitHub.)
+job_applications.xlsx
+job_tracker.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
