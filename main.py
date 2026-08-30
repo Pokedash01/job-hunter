@@ -9,7 +9,7 @@ from jobspy import scrape_jobs
 from google import genai
 from google.genai import types
 
-# ReportLab for PDF generation
+# ReportLab imports for dense, professional layout
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
@@ -20,7 +20,7 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 SEARCH_KEY = os.environ.get("SEARCH_API_KEY")
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "")  # Auto-injected by GitHub Actions (e.g. user/repo)
+GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "")
 
 client = genai.Client(api_key=GEMINI_KEY)
 
@@ -28,38 +28,46 @@ client = genai.Client(api_key=GEMINI_KEY)
 KARTIK_PROFILE = """
 Candidate: Kartik Bhatt
 Contact: kb270102@gmail.com | +91-7428062532 | Portfolio: https://kartikb.vercel.app/
-Education: Bachelor of Computer Applications (Computer Science), Maharaja Surajmal Institute (GPA: 9.3/10, Top 1%)
-Total Experience: ~3.5+ years across KPMG and GlobalLogic.
+Education: Bachelor of Computer Applications, Maharaja Surajmal Institute (Computer Science) | GPA: 9.3/10 (Top 1%)
 
-Core Skills & Tools:
-- Microsoft Power Platform (Power Apps, Power Automate, Power BI)
-- GenAI & Agentic AI (Copilot Studio, Multi-modal Copilot Agents, GenAI dataset training, Azure AI)
-- SharePoint Online (Governance, Term Store, Permission Management, List Migrations)
-- Process Optimization & Operations (Lean Six Sigma Yellow Belt, VBA Macros, SQL, QA Management)
-- Stakeholder Management & Business Development (100+ RFP/RFI responses, 360-degree stakeholder management across 13 sectors)
+Experience Summary: ~3.5+ years of cross-functional experience across KPMG and GlobalLogic driving process automation, Copilot/GenAI agents, Power Platform solutions, and operational excellence.
 
-Key Career Highlights:
-1. KPMG (Analyst - Knowledge Management):
-   - Built Power Platform solutions facilitating 20,000 reach outs annually across 13 sectors, saving 1,200 hrs/yr.
-   - Built multi-modal Copilot agents to assist with messy data and metadata tagging, saving 325 hrs/yr.
-   - Migrated legacy Excel processes for 45+ pillars to automated SharePoint Online lists with permission governance.
-   - Overall saved 2,000+ hours annually using Power Platform, Copilot Studio, and VBA macros. Awarded KUDOS & Gurus@Work.
-2. GlobalLogic (Associate Analyst - Content Engineering):
-   - Created QA frameworks for Google GenAI training datasets used for Android on-screen search.
-   - Improved onshore project quality from 74% to 95%, managing process documentation across 10+ projects.
+Work Experience:
+1. KPMG | Analyst | Knowledge Management | Gurugram (May 2024 - Present)
+   - Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management.
+   - Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30 member firms, saving 1,200 hrs annually.
+   - Automated migration of old Excel-based data collection for 45+ pillars to automated SPO lists with permission governance & alerts.
+   - Built & managed VBA macro solutions refreshing 30,000+ assets globally, saving 485 hrs annually.
+   - Architected multi-modal Copilot agent for messy data, field drafting, and metadata tagging, saving 325 hrs annually.
+   - Overall saved 2,000+ hrs annually across Power Platform, Copilot Studio, and VBA. Handled 100+ RFP/RFI requests.
+   - Awards: KUDOS (efficiency & Lean Six Sigma), Super Team Award, Ally of Inclusion, Gurus@Work.
 
-Target Roles:
-- Technical Product Manager / Product Operations Lead (Internal Tools / AI / Automation)
-- GenAI Solutions Specialist / AI Transformation Lead
-- Operations Optimization Lead / Business Process Automation Consultant
+2. GlobalLogic Technologies | Associate Analyst | Content Engineering | Gurugram (Sep 2022 - Oct 2023)
+   - Created best practices, process docs, and QA processes for Google project to build test & training datasets for GenAI screen search on Android.
+   - Piloted project to extract answers from multi-level docs for AI training datasets.
+   - Improved onshore project delivery quality from 74% to 95%; QA'd 500+ pieces weekly and led 3 pilot projects.
+
+Skills: Copilot Studio, GenAI Agents, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL.
+Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate, AI Transformation Leader (AB-731), AI Business Professional (AB-730).
 """
+
+# Strict Domain Rules: Only Product, Operations, Technology
+EXCLUDED_KEYWORDS = [
+    "hr", "human resources", "talent acquisition", "recruiter", "recruitment", 
+    "sales", "business development executive", "bde", "marketing", "digital marketing", 
+    "telecaller", "content writer", "seo", "graphic designer", "accountant"
+]
+
+ALLOWED_DOMAINS = [
+    "product", "operations", "tech", "technology", "program", "project", 
+    "automation", "analyst", "process", "copilot", "power platform", "ai", "consultant"
+]
 
 EXCEL_FILE = "job_applications.xlsx"
 DOCS_DIR = "generated_docs"
-
 os.makedirs(DOCS_DIR, exist_ok=True)
 
-# ----------------- STORAGE & EXCEL ENGINE -----------------
+# ----------------- STORAGE ENGINE -----------------
 def init_tracker():
     conn = sqlite3.connect("job_tracker.db")
     c = conn.cursor()
@@ -117,7 +125,16 @@ def log_job(url, title, company, location, ctc, score, resume_path, cl_path, git
     except Exception as e:
         print(f"Excel logging error: {e}")
 
-# ----------------- MATCHING RULES -----------------
+# ----------------- STRICT DOMAIN & SALARY FILTER -----------------
+def is_role_relevant(title: str) -> bool:
+    t = title.lower()
+    # Reject excluded domains immediately
+    for bad in EXCLUDED_KEYWORDS:
+        if re.search(r'\b' + re.escape(bad) + r'\b', t):
+            return False
+    # Must contain at least one target domain keyword
+    return any(good in t for good in ALLOWED_DOMAINS)
+
 def passes_salary_and_location(location_str, min_sal, max_sal):
     loc = str(location_str).lower()
     if any(k in loc for k in ["delhi", "ncr", "gurgaon", "gurugram", "noida", "remote"]):
@@ -129,13 +146,13 @@ def passes_salary_and_location(location_str, min_sal, max_sal):
         return max_sal >= min_required
     return True
 
-# ----------------- ENTERPRISE ATS DISCOVERY -----------------
+# ----------------- ENTERPRISE ATS SEARCH -----------------
 def search_enterprise_ats_jobs():
     ats_queries = [
-        'site:myworkdayjobs.com ("Product Manager" OR "Operations Lead" OR "Power Platform" OR "AI") India',
-        'site:greenhouse.io ("Product Operations" OR "Technical PM" OR "Solutions Consultant") India',
-        'site:jobs.lever.co ("Product Manager" OR "Operations" OR "Automation Lead") India',
-        'site:jobs.ashbyhq.com ("Product Manager" OR "Operations Lead" OR "AI") India'
+        'site:myworkdayjobs.com ("Product Manager" OR "Operations Lead" OR "Process Automation" OR "Power Platform") India',
+        'site:greenhouse.io ("Product Operations" OR "Technical PM" OR "Solutions Consultant" OR "Business Analyst") India',
+        'site:jobs.lever.co ("Product Manager" OR "Operations Specialist" OR "AI Specialist") India',
+        'site:jobs.ashbyhq.com ("Product Manager" OR "Operations Lead" OR "AI Lead") India'
     ]
     discovered = []
     if not SEARCH_KEY:
@@ -155,9 +172,10 @@ def search_enterprise_ats_jobs():
             res = requests.get(url, params=params, timeout=15).json()
             for item in res.get("organic_results", []):
                 link = item.get("link", "")
-                if link:
+                title = item.get("title", "Role Opening")
+                if link and is_role_relevant(title):
                     discovered.append({
-                        "title": item.get("title", "Role Opening"),
+                        "title": title,
                         "company": item.get("displayed_link", "Enterprise Portal").split(".")[0],
                         "job_url": link,
                         "location": "Delhi NCR / Hybrid India",
@@ -170,40 +188,47 @@ def search_enterprise_ats_jobs():
             
     return discovered
 
-# ----------------- GEMINI AI ASSET GENERATION -----------------
+# ----------------- GEMINI TAILORED ASSET GENERATOR -----------------
 def generate_application_kit(title, company, description):
     prompt = f"""
-    You are an executive career advisor tailoring high-impact job materials for Kartik Bhatt.
+    You are an expert executive resume writer and career strategist tailoring application documents for Kartik Bhatt.
 
     Candidate Profile:
     {KARTIK_PROFILE}
 
-    Target Job:
+    Target Job Opening:
     Title: {title}
     Company: {company}
-    JD Snippet: {description[:1500]}
+    JD Snippet: {description[:1600]}
 
-    Generate tailored content for a professional PDF resume and cover letter.
-    Return ONLY a JSON object:
+    Generate tailored, rich, and dense content for both a 1-page full Resume and a comprehensive Cover Letter.
+
+    Return ONLY a valid JSON object matching this exact schema:
     {{
-        "match_score": "e.g., 92%",
+        "match_score": "e.g., 94%",
         "reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
         "skills_gap": "Any missing tool/skill or 'None'",
-        "tailored_summary": "A 3-line tailored Professional Summary specifically aligned to this JD.",
-        "kpmg_bullets": [
-            "Tailored KPMG bullet 1 emphasizing Power Platform / Copilot Studio impact",
-            "Tailored KPMG bullet 2 emphasizing automation, scale, and stakeholder leadership",
-            "Tailored KPMG bullet 3 emphasizing process governance or migration"
+        "tailored_summary": "A comprehensive 3-4 line Professional Summary showcasing 3.5+ years of experience across KPMG and GlobalLogic, tailored directly to {title}.",
+        "kpmg_project_bullets": [
+            "Tailored bullet 1 detailing Power Platform solution for 20,000 reach outs and 1,200 hrs saved, framed for {title}",
+            "Tailored bullet 2 detailing end-to-end SPO migration for 45+ pillars and governance",
+            "Tailored bullet 3 detailing global VBA macro repository automation for 30,000+ assets saving 485 hrs",
+            "Tailored bullet 4 detailing multi-modal Copilot Agent for metadata and messy data saving 325 hrs"
+        ],
+        "kpmg_bd_bullets": [
+            "Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.",
+            "Catered to 100+ RFP/RFI requests and built 100+ internal site pages aligned with enterprise brand guidelines.",
+            "Administered contact management system for 10,000+ members and uploaded 5,000+ content assets."
         ],
         "globallogic_bullets": [
-            "Tailored GlobalLogic bullet 1 emphasizing Google GenAI dataset QA",
-            "Tailored GlobalLogic bullet 2 emphasizing process documentation and quality metrics"
+            "Designed best practices, process docs, and QA workflows for Google GenAI datasets for Android screen search.",
+            "Managed process documentation across 10+ engagements, improving project delivery quality from 74% to 95%."
         ],
-        "skills_list": "Copilot Studio, GenAI Agents, Power Apps, Power Automate, Power BI, SharePoint Online, SQL, Lean Six Sigma, VBA",
+        "cover_letter_subject": "Subject: Driving Operational Excellence & Scalable Solutions as {title}",
         "cover_letter_paragraphs": [
-            "Opening paragraph stating interest in the role at {company} and summarizing core value proposition.",
-            "Body paragraph highlighting specific quantitative impact from KPMG and GlobalLogic aligned with this role.",
-            "Closing paragraph requesting an interview and summarizing readiness to contribute."
+            "I am writing to express my strong enthusiasm for the {title} position at {company}. With over 3.5 years of experience across KPMG and GlobalLogic, I have specialized in building scalable automation frameworks, leveraging Microsoft Copilot and Power Platform ecosystems, and driving data-backed operational efficiencies. My background aligns directly with {company}'s focus on innovation and execution.",
+            "In my current role at KPMG, I lead cross-functional initiatives across 13 sectors, managing 360-degree stakeholder relationships and translating complex business requirements into high-impact digital solutions. I architected end-to-end Power Platform systems that streamlined 20,000 annual interactions and built multi-modal Copilot agents that saved over 2,000 hours annually. Additionally, during my tenure at GlobalLogic, I established quality assurance frameworks for Google's GenAI training datasets, elevating project benchmark delivery from 74% to 95%.",
+            "I am excited about the opportunity to bring my hands-on technical skills in Copilot Studio, Power Platform, and SQL, coupled with Lean Six Sigma methodologies, to accelerate outcomes for {company}. Thank you for considering my application. I look forward to discussing how my experience can deliver measurable value to your team."
         ]
     }}
     """
@@ -218,100 +243,118 @@ def generate_application_kit(title, company, description):
         print(f"AI Generation error: {e}")
         return {
             "match_score": "High Match",
-            "reason": "Strong alignment with Power Platform, Copilot GenAI, and operations background.",
+            "reason": "Strong alignment with Kartik's Power Platform, GenAI agent building, and operations leadership background.",
             "skills_gap": "None",
-            "tailored_summary": "Results-driven Analyst with 3.5+ years of experience across KPMG and GlobalLogic specializing in Power Platform automation, Copilot AI agents, and cross-functional operations.",
-            "kpmg_bullets": [
-                "Built Power Platform solutions facilitating 20,000 reach outs annually across 13 sectors, saving 1,200 hrs/yr.",
-                "Architected multi-modal Copilot agents for metadata tagging and unstructured data processing, saving 325 hrs/yr.",
-                "Migrated legacy Excel systems for 45+ pillars to automated SharePoint Online lists with strict permission governance."
+            "tailored_summary": f"Analytical and solutions-driven professional with 3.5+ years of experience across KPMG and GlobalLogic specializing in Power Platform automation, Copilot AI agents, and cross-functional operations tailored for the {title} role.",
+            "kpmg_project_bullets": [
+                "Built complete Power Platform solution facilitating 20,000 reach outs annually across 13 sectors, saving 1,200 hrs annually.",
+                "Automated migration of data collection for 45+ pillars to automated SPO lists with change management and permissions.",
+                "Developed VBA macro solutions for 30,000+ assets globally, saving 485 hrs annually.",
+                "Built multi-modal Copilot agent to clean messy data and apply metadata tags, saving 325 hrs annually."
+            ],
+            "kpmg_bd_bullets": [
+                "Saved 2,000+ hrs annually across Power Platform, Copilot Studio, and VBA Macros.",
+                "Catered to 100+ RFP and RFI requests and 100+ internal site pages according to brand standards.",
+                "Administered contact management system for 10,000+ members and managed 50+ SharePoint governance requests."
             ],
             "globallogic_bullets": [
-                "Engineered QA frameworks for Google GenAI datasets for Android search, boosting delivery quality from 74% to 95%.",
-                "Managed process documentation across 10+ high-visibility client engagements."
+                "Created best practices and QA processes for Google GenAI training datasets for Android screen search.",
+                "Improved project delivery quality from 74% to 95%, managing process documentation for 10+ projects."
             ],
-            "skills_list": "Copilot Studio, GenAI Agents, Power Apps, Power Automate, Power BI, SharePoint Online, SQL, Lean Six Sigma, VBA",
+            "cover_letter_subject": f"Subject: Application for {title} - Kartik Bhatt",
             "cover_letter_paragraphs": [
-                f"I am writing to express my strong interest in the {title} position at {company}.",
-                "With over 3.5 years of experience across KPMG and GlobalLogic driving enterprise automation, Power Platform ecosystems, and Copilot AI agents, I bring a proven track record of optimizing cross-functional operations.",
-                "I look forward to discussing how my technical background and execution rigor can add immediate value to your team."
+                f"I am excited to apply for the {title} position at {company}. With over 3.5 years of experience at KPMG and GlobalLogic, I specialize in process automation, Power Platform ecosystems, and Copilot AI agents.",
+                "At KPMG, I architected automation systems that saved over 2,000 hours annually and led migrations across 45 pillars. At GlobalLogic, I engineered QA frameworks for Google's GenAI datasets, lifting project quality from 74% to 95%.",
+                f"I look forward to bringing this operational and technical expertise to {company} to drive scalable outcomes."
             ]
         }
 
-# ----------------- PDF BUILDER ENGINE -----------------
-def create_pdf_resume(filepath, kit):
-    doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+# ----------------- DENSE PDF BUILDERS -----------------
+def create_dense_resume(filepath, kit):
+    doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=25, bottomMargin=25)
     styles = getSampleStyleSheet()
     story = []
 
-    name_style = ParagraphStyle('Name', parent=styles['Heading1'], fontSize=18, leading=20, textColor=colors.HexColor("#1A365D"), alignment=1)
-    contact_style = ParagraphStyle('Contact', parent=styles['Normal'], fontSize=9, leading=12, alignment=1, textColor=colors.HexColor("#4A5568"))
-    section_style = ParagraphStyle('SecHeader', parent=styles['Heading2'], fontSize=11, leading=13, textColor=colors.HexColor("#1A365D"), spaceBefore=6, spaceAfter=2)
-    body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor("#2D3748"))
-    job_header_style = ParagraphStyle('JobHeader', parent=styles['Normal'], fontSize=9.5, leading=12, fontName='Helvetica-Bold', textColor=colors.HexColor("#1A202C"))
-    bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'], fontSize=8.5, leading=11.5, leftIndent=12, textColor=colors.HexColor("#2D3748"))
+    name_style = ParagraphStyle('Name', parent=styles['Heading1'], fontSize=16, leading=18, textColor=colors.HexColor("#0F2942"), alignment=1)
+    contact_style = ParagraphStyle('Contact', parent=styles['Normal'], fontSize=8.5, leading=11, alignment=1, textColor=colors.HexColor("#334155"))
+    section_style = ParagraphStyle('SecHeader', parent=styles['Heading2'], fontSize=10, leading=12, textColor=colors.HexColor("#0F2942"), spaceBefore=4, spaceAfter=1)
+    body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor("#1E293B"))
+    company_style = ParagraphStyle('Comp', parent=styles['Normal'], fontSize=9, leading=11.5, fontName='Helvetica-Bold', textColor=colors.HexColor("#0F2942"))
+    subhead_style = ParagraphStyle('SubHead', parent=styles['Normal'], fontSize=8.5, leading=10.5, fontName='Helvetica-Bold', textColor=colors.HexColor("#334155"), leftIndent=6)
+    bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'], fontSize=8, leading=10.5, leftIndent=12, textColor=colors.HexColor("#1E293B"))
 
     # Header
     story.append(Paragraph("<b>KARTIK BHATT</b>", name_style))
-    story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | Portfolio: https://kartikb.vercel.app/ | Delhi NCR, India", contact_style))
-    story.append(Spacer(1, 4))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#CBD5E0"), spaceAfter=6))
+    story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | LinkedIn | Website: https://kartikb.vercel.app/ | Delhi NCR, India", contact_style))
+    story.append(Spacer(1, 3))
+    story.append(HRFlowable(width="100%", thickness=0.75, color=colors.HexColor("#94A3B8"), spaceAfter=3))
 
     # Professional Summary
-    story.append(Paragraph("PROFESSIONAL SUMMARY", section_style))
+    story.append(Paragraph("<b>PROFESSIONAL SUMMARY</b>", section_style))
     story.append(Paragraph(kit.get("tailored_summary", ""), body_style))
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 3))
 
     # Education
-    story.append(Paragraph("EDUCATION", section_style))
-    story.append(Paragraph("<b>Maharaja Surajmal Institute</b> | Bachelor of Computer Applications (Computer Science) — <b>GPA: 9.3/10 (Top 1%)</b>", body_style))
-    story.append(Spacer(1, 4))
+    story.append(Paragraph("<b>EDUCATION</b>", section_style))
+    story.append(Paragraph("<b>Maharaja Surajmal Institute</b> | Bachelor of Computer Applications (Computer Science) | <b>GPA: 9.3/10 (Top 1%)</b>", body_style))
+    story.append(Spacer(1, 3))
 
     # Experience
-    story.append(Paragraph("WORK EXPERIENCE", section_style))
-    story.append(Paragraph("<b>KPMG</b> | Analyst — Knowledge Management | Gurugram <i>(May 2024 – Present)</i>", job_header_style))
-    for b in kit.get("kpmg_bullets", []):
+    story.append(Paragraph("<b>WORK EXPERIENCE</b>", section_style))
+    story.append(Paragraph("<b>KPMG</b> | Analyst — Knowledge Management | Gurugram <i>(May 2024 – Present | 3 yrs 2 mos total exp)</i>", company_style))
+    story.append(Paragraph("<i>Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management & business development.</i>", body_style))
+    
+    story.append(Paragraph("Key Projects", subhead_style))
+    for b in kit.get("kpmg_project_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
-    story.append(Spacer(1, 4))
+    
+    story.append(Paragraph("Business Development & Operations", subhead_style))
+    for b in kit.get("kpmg_bd_bullets", []):
+        story.append(Paragraph(f"• {b}", bullet_style))
+    
+    story.append(Paragraph("Key Achievements: Awarded 'KUDOS' (Lean Six Sigma saving 2,000+ hrs), 'Super Team', 'Ally of Inclusion', and 'Gurus@Work'.", bullet_style))
+    story.append(Spacer(1, 3))
 
-    story.append(Paragraph("<b>GlobalLogic Technologies</b> | Associate Analyst — Content Engineering | Gurugram <i>(Sep 2022 – Oct 2023)</i>", job_header_style))
+    story.append(Paragraph("<b>GlobalLogic Technologies Private Limited</b> | Associate Analyst — Content Engineering | Gurugram <i>(Sep 2022 – Oct 2023)</i>", company_style))
     for b in kit.get("globallogic_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 3))
 
     # Skills & Certifications
-    story.append(Paragraph("SKILLS & CERTIFICATIONS", section_style))
-    story.append(Paragraph(f"<b>Core Stack:</b> {kit.get('skills_list', '')}", body_style))
-    story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Foundations | AI Transformation Leader (AB-731)", body_style))
+    story.append(Paragraph("<b>SKILLS & CERTIFICATIONS</b>", section_style))
+    story.append(Paragraph("<b>Skills:</b> Copilot GenAI (Agents), Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL", body_style))
+    story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Certified Foundations Associate | AI Transformation Leader (AB-731) | AI Business Professional (AB-730)", body_style))
 
     doc.build(story)
 
-def create_pdf_cover_letter(filepath, title, company, kit):
-    doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=45, rightMargin=45, topMargin=45, bottomMargin=45)
+def create_dense_cover_letter(filepath, title, company, kit):
+    doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=45, rightMargin=45, topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
     story = []
 
-    name_style = ParagraphStyle('Name', parent=styles['Heading1'], fontSize=16, leading=18, textColor=colors.HexColor("#1A365D"))
+    name_style = ParagraphStyle('Name', parent=styles['Heading1'], fontSize=16, leading=18, textColor=colors.HexColor("#0F2942"))
     contact_style = ParagraphStyle('Contact', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor("#4A5568"))
-    body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=10, leading=14, spaceBefore=8, textColor=colors.HexColor("#2D3748"))
+    subj_style = ParagraphStyle('Subj', parent=styles['Normal'], fontSize=10, leading=13, fontName='Helvetica-Bold', textColor=colors.HexColor("#0F2942"), spaceBefore=6, spaceAfter=6)
+    body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=9.5, leading=14, spaceBefore=6, textColor=colors.HexColor("#1E293B"))
 
     # Header
     story.append(Paragraph("<b>KARTIK BHATT</b>", name_style))
-    story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | Portfolio: https://kartikb.vercel.app/", contact_style))
-    story.append(Spacer(1, 6))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#CBD5E0"), spaceAfter=12))
+    story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | LinkedIn | Portfolio: https://kartikb.vercel.app/", contact_style))
+    story.append(Spacer(1, 4))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#CBD5E0"), spaceAfter=8))
 
     story.append(Paragraph(f"<b>Date:</b> {datetime.now().strftime('%B %d, %Y')}", body_style))
-    story.append(Paragraph(f"<b>Application For:</b> {title}", body_style))
+    story.append(Paragraph(f"<b>Target Role:</b> {title}", body_style))
     story.append(Paragraph(f"<b>Company:</b> {company}", body_style))
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 4))
 
-    story.append(Paragraph("Dear Hiring Team,", body_style))
+    story.append(Paragraph(f"<b>{kit.get('cover_letter_subject', 'Subject: Application for ' + title)}</b>", subj_style))
+    story.append(Paragraph("Dear Hiring Manager,", body_style))
 
     for p in kit.get("cover_letter_paragraphs", []):
         story.append(Paragraph(p, body_style))
 
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
     story.append(Paragraph("Sincerely,<br/><b>Kartik Bhatt</b>", body_style))
 
     doc.build(story)
@@ -319,7 +362,7 @@ def create_pdf_cover_letter(filepath, title, company, kit):
 # ----------------- TELEGRAM DISPATCHER -----------------
 def send_telegram_alert(title, company, location, url, ctc_label, kit, raw_resume_url, raw_cl_url):
     msg = (
-        f"🎯 *New Matched Role for Kartik!*\n\n"
+        f"🎯 *New Job Matched for Kartik!*\n\n"
         f"📌 *Role:* {title}\n"
         f"🏢 *Company:* {company}\n"
         f"📍 *Location:* {location}\n"
@@ -328,8 +371,8 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, raw_resum
         f"💡 *Why You Match:* {kit.get('reason')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
         f"🔗 [Apply Directly Here]({url})\n\n"
-        f"📂 *Generated Application PDFs (1-Click View & Download):*\n"
-        f"📄 [Download Tailored Resume PDF]({raw_resume_url})\n"
+        f"📂 *Custom Tailored PDFs (Ready to Download & Attach):*\n"
+        f"📄 [Download Full Tailored Resume PDF]({raw_resume_url})\n"
         f"📝 [Download Tailored Cover Letter PDF]({raw_cl_url})"
     )
 
@@ -347,13 +390,13 @@ def run():
     init_tracker()
     all_jobs = []
 
-    # 1. Scrape standard boards
+    # 1. Scrape standard boards with targeted queries
     try:
         board_jobs = scrape_jobs(
             site_name=["linkedin", "indeed", "glassdoor"],
-            search_term='"Product Manager" OR "Power Platform" OR "Operations Lead" OR "Copilot" OR "AI Specialist"',
+            search_term='"Product Manager" OR "Product Operations" OR "Operations Manager" OR "Operations Lead" OR "Power Platform" OR "Copilot" OR "Solutions Specialist"',
             location="India",
-            results_wanted=15,
+            results_wanted=20,
             hours_old=24,
             country_indeed='india'
         )
@@ -379,6 +422,12 @@ def run():
         if not url or url == 'nan' or is_seen(url):
             continue
 
+        # Enforce strict domain relevance (No HR/Sales/Marketing)
+        if not is_role_relevant(title):
+            print(f"Skipping irrelevant domain: {title}")
+            continue
+
+        # Enforce CTC and Location rules
         if not passes_salary_and_location(location, min_sal, max_sal):
             continue
 
@@ -398,17 +447,17 @@ def run():
         resume_path = os.path.join(DOCS_DIR, resume_filename)
         cl_path = os.path.join(DOCS_DIR, cl_filename)
 
-        # Build PDFs
-        create_pdf_resume(resume_path, kit)
-        create_pdf_cover_letter(cl_path, title, company, kit)
+        # Build Full Dense PDFs
+        create_dense_resume(resume_path, kit)
+        create_dense_cover_letter(cl_path, title, company, kit)
 
-        # Build GitHub URLs for direct download
+        # Direct GitHub Raw URLs
         repo = GITHUB_REPOSITORY if GITHUB_REPOSITORY else "owner/repo"
         raw_resume_url = f"https://raw.githubusercontent.com/{repo}/main/{DOCS_DIR}/{resume_filename}"
         raw_cl_url = f"https://raw.githubusercontent.com/{repo}/main/{DOCS_DIR}/{cl_filename}"
         github_folder_link = f"https://github.com/{repo}/tree/main/{DOCS_DIR}"
 
-        # Send alert to Telegram
+        # Send alert
         send_telegram_alert(title, company, location, url, ctc_label, kit, raw_resume_url, raw_cl_url)
 
         # Log into SQLite & Excel
@@ -423,7 +472,7 @@ def run():
             cl_path=cl_path,
             github_link=github_folder_link
         )
-        print(f"Generated PDFs & dispatched alert for: {title} at {company}")
+        print(f"Generated comprehensive PDFs for: {title} at {company}")
 
 if __name__ == "__main__":
     run()
