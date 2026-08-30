@@ -249,7 +249,7 @@ def generate_application_kit(title, company, description):
     You are an expert executive resume writer, ATS optimization specialist, and career strategist
     tailoring application documents for Kartik Bhatt (~3.5 years of experience).
 
-    Candidate Profile:
+    Candidate Profile (ground truth — never fabricate skills or employment):
     {KARTIK_PROFILE}
 
     Target Job Opening:
@@ -257,20 +257,29 @@ def generate_application_kit(title, company, description):
     Company: {company}
     JD Snippet: {description[:2200]}
 
-    TASK:
-    1. Read the JD Snippet and extract 10-15 exact keywords/phrases an ATS would scan for.
-       Only include keywords Kartik's profile supports (Power Automate, Copilot Studio, SQL, Power BI, etc.).
-    2. Weave these keywords into the summary, bullets, and cover letter.
-    3. Write quantified bullets pulled directly from Kartik's KPMG and GlobalLogic experience.
-    4. Write a 4-paragraph tailored cover letter referencing {title} and {company}.
+    CRITICAL RULES FOR RESUME VS COVER LETTER:
+    1. RESUME PROFESSIONAL SUMMARY RULES:
+       - DO NOT mention "{company}" or "seeking to work at {company}" anywhere in the tailored_summary.
+       - The summary represents Kartik's personal executive profile. Frame it around his 3.5+ years of experience, core domains (Power Platform, GenAI Agents, Data/Product Analytics, Automation), and quantifiable business impact.
+       - Align phrasing to the domain of {title} without sounding like a job application objective.
+
+    2. ATS KEYWORDS & SKILLS ALIGNMENT:
+       - Extract 10-14 exact technical & functional skills directly from the JD that are genuinely backed by Kartik's profile.
+       - Prioritize keywords like SQL, Power Automate, Power Apps, Copilot Studio, Power BI, Process Optimization, Stakeholder Management, A/B Testing, or ETL depending on the JD focus.
+
+    3. QUANTIFIED BULLETS:
+       - Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven, highlighting the skills that map to the JD.
+
+    4. COVER LETTER:
+       - This is where you actively reference {company} and {title}, explaining why Kartik is interested and how his past results solve their needs.
 
     Return ONLY a valid JSON object matching this schema:
     {{
         "match_score": "e.g., 94%",
         "reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
         "skills_gap": "Any missing tool/skill or 'None'",
-        "ats_keywords": ["keyword1", "keyword2", "... 10-15 exact JD-relevant keywords"],
-        "tailored_summary": "A comprehensive 4-5 line Professional Summary tailored directly to {title} at {company}.",
+        "ats_keywords": ["10-14 exact matching technical/domain keywords"],
+        "tailored_summary": "A 3-4 sentence dense executive summary highlighting Kartik's expertise in process automation, analytics, and GenAI agent development. Must NOT mention {company}.",
         "kpmg_project_bullets": [
             "Quantified bullet on Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved",
             "Quantified bullet on SPO migration: 45+ pillars, 3 Power Automate flows, change management",
@@ -300,7 +309,6 @@ def generate_application_kit(title, company, description):
     }}
     """
     try:
-        # Updated to gemini-3.6-flash per current SDK requirements
         response = client.models.generate_content(
             model='gemini-3.6-flash',
             contents=prompt,
@@ -318,7 +326,7 @@ def generate_application_kit(title, company, description):
                 "GenAI Agents", "SQL", "Process Automation", "Stakeholder Management",
                 "Change Management", "SharePoint Online", "Data Analytics", "RFP/RFI Management"
             ],
-            "tailored_summary": f"Analytical and solutions-driven professional with 3.5+ years of experience across KPMG and GlobalLogic specializing in Power Platform automation, Copilot AI agents, SQL-driven data analytics, and cross-functional stakeholder management.",
+            "tailored_summary": "Solutions-driven analyst with ~3.5+ years of experience across KPMG and GlobalLogic specializing in enterprise process automation, Microsoft Power Platform architectures, GenAI agent implementation, and data-driven operational optimization. Proven track record of architecting scalable workflows, automating legacy data pipelines, and saving over 2,000 hours annually across global cross-functional engagements.",
             "kpmg_project_bullets": [
                 "Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.",
                 "Built end-to-end migration of Excel-based data collection for 45+ pillars to automated SPO lists, including 3 Power Automate flows for alerts, change management, and permission governance.",
@@ -372,7 +380,7 @@ def create_dense_resume(filepath, kit):
 
     ats_keywords = kit.get("ats_keywords", [])
     if ats_keywords:
-        story.append(Paragraph("<b>CORE COMPETENCIES</b>", section_style))
+        story.append(Paragraph("<b>CORE COMPETENCIES & KEYWORDS</b>", section_style))
         story.append(Paragraph(" • ".join(ats_keywords), body_style))
         story.append(Spacer(1, 3))
 
@@ -401,7 +409,8 @@ def create_dense_resume(filepath, kit):
     story.append(Spacer(1, 3))
 
     story.append(Paragraph("<b>SKILLS & CERTIFICATIONS</b>", section_style))
-    story.append(Paragraph("<b>Skills:</b> Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL, MySQL, Process Automation, Change Management, Stakeholder Management, Product/Data Analytics, RFP/RFI Management, Digital Transformation", body_style))
+    story.append(Paragraph("<b>Technical Stack:</b> Microsoft Copilot Studio, Power Automate, Power Apps, Power BI, SharePoint Online, Python, SQL, MySQL, Advanced Excel/VBA, Process Mining, API Integrations", body_style))
+    story.append(Paragraph("<b>Domain & Operations:</b> Process Automation, Digital Transformation, Stakeholder Management, Product Analytics, RFP/RFI Bidding, Change Management, Data Governance", body_style))
     story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Microsoft Certified: AI Transformation Leader (AB-731) | Microsoft Certified: AI Business Professional (AB-730) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Certified Foundations Associate", body_style))
 
     doc.build(story)
@@ -481,7 +490,7 @@ def run():
     init_tracker()
     all_jobs = []
 
-    # 1. Scrape targeted job boards (Removed Glassdoor to avoid 403 errors on CI)
+    # 1. Scrape targeted job boards
     try:
         board_jobs = scrape_jobs(
             site_name=["linkedin", "indeed"],
