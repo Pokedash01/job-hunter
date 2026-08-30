@@ -1,0 +1,40 @@
+name: 24/7 Job Search Engine
+
+on:
+  schedule:
+    # Runs every 4 hours automatically
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allows manual run button
+
+jobs:
+  run-search:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Caches SQLite DB across runs to prevent repeat alerts
+      - name: Restore Job Database Cache
+        uses: actions/cache@v4
+        with:
+          path: job_tracker.db
+          key: job-db-${{ github.run_id }}
+          restore-keys: |
+            job-db-
+
+      - name: Install Dependencies
+        run: |
+          pip install python-jobspy google-genai requests pandas
+
+      - name: Run Job Hunter Engine
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+        run: python main.py
