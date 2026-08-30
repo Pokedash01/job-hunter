@@ -63,24 +63,37 @@ Skills: Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Auto
 Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Microsoft Certified: AI Transformation Leader (AB-731), Microsoft Certified: AI Business Professional (AB-730), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate.
 """
 
-EXCLUDED_KEYWORDS = [
+# ----------------- FILTERING CONSTANTS -----------------
+SENIORITY_BLACKLIST = [
+    r"\bsenior manager\b", r"\bprincipal\b", r"\bdirector\b", r"\bvp\b",
+    r"\bhead of\b", r"\bgroup product manager\b", r"\btech lead\b",
+    r"\bengineering manager\b", r"\bgeneral manager\b", r"\blead architect\b",
+    r"\bassociate director\b", r"\bavp\b", r"\boperations director\b"
+]
+
+ROLES_WHITELIST = [
+    r"\bdata analyst\b", r"\bbusiness analyst\b", r"\bproduct analyst\b",
+    r"\bassociate product manager\b", r"\bapm\b", r"\bcopilot studio\b",
+    r"\bpower automate\b", r"\bpower platform\b", r"\bbi developer\b",
+    r"\bprocess automation\b", r"\banalytics engineer\b", r"\boperations analyst\b",
+    r"\bproduct operations\b"
+]
+
+EXCLUDED_DOMAINS = [
     "hr", "human resources", "talent acquisition", "recruiter", "recruitment", 
     "sales", "business development executive", "bde", "marketing", "digital marketing", 
     "telecaller", "content writer", "seo", "graphic designer", "accountant"
 ]
 
-ALLOWED_DOMAINS = [
-    "product", "operations", "tech", "technology", "program", "project", 
-    "automation", "analyst", "process", "copilot", "power platform", "ai", "consultant"
-]
+LOCATIONS_TIER_1 = [r"\bdelhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b", r"\bnoida\b", r"\bfaridabad\b", r"\bremote\b", r"\bwfh\b", r"\bwork from home\b"]
+LOCATIONS_TIER_2 = [r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b"]
+
+MAX_EXPERIENCE_CAP = 5.5  # Rejects roles asking >= 6 years minimum
 
 EXCEL_FILE = "job_applications.xlsx"
 DOCS_DIR = "generated_docs"
 os.makedirs(DOCS_DIR, exist_ok=True)
 
-# ----------------- GITHUB LINK CONFIG -----------------
-# Used to build direct download links to the PDFs once they're pushed to the repo
-# by the "Commit and Push" step at the end of the workflow run.
 GITHUB_REPO = "Pokedash01/job-hunter"
 GITHUB_BRANCH = "main"
 
@@ -107,7 +120,7 @@ def init_tracker():
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
             "Date Found", "Role Title", "Company", "Location", 
-            "Estimated CTC", "Match Score", "Application Link", 
+            "Location Tier", "Estimated CTC", "Match Score", "Application Link", 
             "Status", "Resume File Name", "Cover Letter File Name"
         ])
         df.to_excel(EXCEL_FILE, index=False)
@@ -120,7 +133,7 @@ def is_seen(url):
     conn.close()
     return seen
 
-def log_job(url, title, company, location, ctc, score, resume_filename, cl_filename):
+def log_job(url, title, company, location, tier, ctc, score, resume_filename, cl_filename):
     conn = sqlite3.connect("job_tracker.db")
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO seen_jobs (url, title, company) VALUES (?, ?, ?)", (url, title, company))
@@ -134,6 +147,7 @@ def log_job(url, title, company, location, ctc, score, resume_filename, cl_filen
             "Role Title": title,
             "Company": company,
             "Location": location,
+            "Location Tier": tier,
             "Estimated CTC": ctc,
             "Match Score": score,
             "Application Link": url,
@@ -146,21 +160,45 @@ def log_job(url, title, company, location, ctc, score, resume_filename, cl_filen
     except Exception as e:
         print(f"Excel logging error: {e}")
 
-# ----------------- DOMAIN & SALARY FILTER -----------------
+# ----------------- SMART SCREENER & FILTERS -----------------
+def is_seniority_excluded(title: str) -> bool:
+    t = title.lower()
+    return any(re.search(pat, t) for pat in SENIORITY_BLACKLIST)
+
 def is_role_relevant(title: str) -> bool:
     t = title.lower()
-    for bad in EXCLUDED_KEYWORDS:
+    # 1. Reject forbidden departments
+    for bad in EXCLUDED_DOMAINS:
         if re.search(r'\b' + re.escape(bad) + r'\b', t):
             return False
-    return any(good in t for good in ALLOWED_DOMAINS)
+    # 2. Reject explicit senior roles
+    if is_seniority_excluded(title):
+        return False
+    # 3. Must match whitelisted role titles
+    return any(re.search(good, t) for good in ROLES_WHITELIST)
 
-def passes_salary_and_location(location_str, min_sal, max_sal):
+def extract_min_experience(text: str):
+    """Extracts the lowest stated years of experience (e.g., '8-10 years' -> 8)."""
+    patterns = [
+        r"(\d+)\s*(?:-|to|\+)\s*(?:\d+)?\s*(?:years|yrs)",
+        r"(?:minimum|at least|over|requires?)\s*(\d+)\s*(?:years|yrs)"
+    ]
+    years = []
+    for pat in patterns:
+        for m in re.finditer(pat, text, flags=re.IGNORECASE):
+            years.append(int(m.group(1)))
+    return min(years) if years else None
+
+def classify_location(location_str: str):
     loc = str(location_str).lower()
-    if any(k in loc for k in ["delhi", "ncr", "gurgaon", "gurugram", "noida", "remote"]):
-        min_required = 1000000
-    else:
-        min_required = 1500000
+    if any(re.search(pat, loc) for pat in LOCATIONS_TIER_1):
+        return True, "Tier 1 (Delhi-NCR / Remote)"
+    if any(re.search(pat, loc) for pat in LOCATIONS_TIER_2):
+        return True, "Tier 2 (Bangalore / Hyderabad / Pune)"
+    return False, "Out of Scope Location"
 
+def passes_salary_check(location_tier: str, min_sal, max_sal):
+    min_required = 1000000 if "Tier 1" in location_tier else 1500000
     if max_sal and max_sal > 0:
         return max_sal >= min_required
     return True
@@ -168,10 +206,10 @@ def passes_salary_and_location(location_str, min_sal, max_sal):
 # ----------------- ENTERPRISE ATS SEARCH -----------------
 def search_enterprise_ats_jobs():
     ats_queries = [
-        'site:myworkdayjobs.com ("Product Manager" OR "Operations Lead" OR "Process Automation" OR "Power Platform") India',
-        'site:greenhouse.io ("Product Operations" OR "Technical PM" OR "Solutions Consultant" OR "Business Analyst") India',
-        'site:jobs.lever.co ("Product Manager" OR "Operations Specialist" OR "AI Specialist") India',
-        'site:jobs.ashbyhq.com ("Product Manager" OR "Operations Lead" OR "AI Lead") India'
+        'site:myworkdayjobs.com ("Business Analyst" OR "Data Analyst" OR "Associate Product Manager" OR "Power Platform") India',
+        'site:greenhouse.io ("Product Analyst" OR "Copilot Studio" OR "Process Automation" OR "Business Analyst") India',
+        'site:jobs.lever.co ("Product Analyst" OR "APM" OR "Power Automate Developer" OR "Operations Analyst") India',
+        'site:jobs.ashbyhq.com ("Product Analyst" OR "Data Analyst" OR "Business Analyst") India'
     ]
     discovered = []
     if not SEARCH_KEY:
@@ -186,19 +224,21 @@ def search_enterprise_ats_jobs():
                 "api_key": SEARCH_KEY,
                 "gl": "in",
                 "hl": "en",
-                "num": 5
+                "num": 8
             }
             res = requests.get(url, params=params, timeout=15).json()
             for item in res.get("organic_results", []):
                 link = item.get("link", "")
                 title = item.get("title", "Role Opening")
+                snippet = item.get("snippet", "")
+                
                 if link and is_role_relevant(title):
                     discovered.append({
                         "title": title,
                         "company": item.get("displayed_link", "Enterprise Portal").split(".")[0],
                         "job_url": link,
-                        "location": "Delhi NCR / Hybrid India",
-                        "description": item.get("snippet", ""),
+                        "location": "Delhi NCR / Remote / Hybrid",
+                        "description": snippet,
                         "min_amount": 0,
                         "max_amount": 0
                     })
@@ -211,7 +251,7 @@ def search_enterprise_ats_jobs():
 def generate_application_kit(title, company, description):
     prompt = f"""
     You are an expert executive resume writer, ATS optimization specialist, and career strategist
-    tailoring application documents for Kartik Bhatt.
+    tailoring application documents for Kartik Bhatt (~3.5 years of experience).
 
     Candidate Profile (ground truth — do not invent achievements outside this):
     {KARTIK_PROFILE}
@@ -222,28 +262,19 @@ def generate_application_kit(title, company, description):
     JD Snippet: {description[:2200]}
 
     TASK:
-    1. Read the JD Snippet carefully and extract 10-15 exact keywords/phrases an ATS (Applicant
-       Tracking System) would scan for — tools, methodologies, certifications, soft skills, domain
-       terms (e.g. "stakeholder management", "SQL", "process automation", "Power BI", "Agile").
-       Only include a keyword if Kartik's real profile genuinely supports it — never fabricate a
-       skill he doesn't have.
-    2. Naturally weave as many of those keywords as possible into the summary, bullets, and cover
-       letter, using their exact JD phrasing where it matches something true about Kartik, so both
-       a human reviewer and an ATS keyword scan register a strong match.
-    3. Write DETAILED, dense, quantified bullets (not generic one-liners) — every bullet should
-       include a concrete number, tool, or outcome, pulled from the Candidate Profile above.
-    4. Write a substantive 4-paragraph cover letter (not 3) that: (a) opens with the role + a
-       specific hook tied to the company's mission/product from the JD, (b) proves fit with 2-3
-       concrete KPMG achievements, (c) proves fit with GlobalLogic experience + tools, (d) closes
-       by connecting his profile to what the company is building, referencing the company by name.
+    1. Read the JD Snippet and extract 10-15 exact keywords/phrases an ATS would scan for.
+       Only include keywords Kartik's profile supports (Power Automate, Copilot Studio, SQL, Power BI, etc.).
+    2. Weave these keywords into the summary, bullets, and cover letter.
+    3. Write quantified bullets pulled directly from Kartik's real KPMG and GlobalLogic experience.
+    4. Write a 4-paragraph tailored cover letter referencing {title} and {company}.
 
     Return ONLY a valid JSON object matching this exact schema:
     {{
         "match_score": "e.g., 94%",
         "reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
         "skills_gap": "Any missing tool/skill or 'None'",
-        "ats_keywords": ["keyword1", "keyword2", "... 10-15 exact JD-relevant keywords Kartik genuinely supports"],
-        "tailored_summary": "A comprehensive 4-5 line Professional Summary showcasing 3.5+ years of experience across KPMG and GlobalLogic, naturally including several ats_keywords, tailored directly to {title} at {company}.",
+        "ats_keywords": ["keyword1", "keyword2", "... 10-15 exact JD-relevant keywords"],
+        "tailored_summary": "A comprehensive 4-5 line Professional Summary showcasing 3.5+ years of experience across KPMG and GlobalLogic, tailored directly to {title} at {company}.",
         "kpmg_project_bullets": [
             "Detailed, quantified bullet on the Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved, framed for {title}",
             "Detailed bullet on the SPO migration: 45+ pillars, 3 Power Automate flows, change management, permission governance",
@@ -265,10 +296,10 @@ def generate_application_kit(title, company, description):
         ],
         "cover_letter_subject": "Subject: Driving Operational Excellence & Scalable Solutions as {title}",
         "cover_letter_paragraphs": [
-            "Opening paragraph: enthusiasm for {title} at {company}, a specific hook tied to {company}'s mission or product from the JD, and a 1-line summary of the 3.5+ year KPMG/GlobalLogic background.",
-            "Second paragraph: 2-3 concrete, quantified KPMG achievements (Power Platform, Copilot agents, hours saved) mapped directly to what the JD is asking for.",
-            "Third paragraph: GlobalLogic experience — QA frameworks for Google's GenAI datasets, project quality lift from 74% to 95% — mapped to relevant JD requirements.",
-            "Closing paragraph: connect Kartik's skill set explicitly to {company}'s goals/products as described in the JD, restate enthusiasm, thank the reader, and invite next steps."
+            "Opening paragraph: enthusiasm for {title} at {company}, a specific hook tied to {company}'s mission or product from the JD, and a 1-line summary of the 3.5+ year background.",
+            "Second paragraph: 2-3 concrete, quantified KPMG achievements mapped directly to what the JD asks for.",
+            "Third paragraph: GlobalLogic experience mapped to relevant JD requirements.",
+            "Closing paragraph: connect Kartik's skill set to {company}'s goals, restate enthusiasm, thank the reader, and invite next steps."
         ]
     }}
     """
@@ -282,8 +313,8 @@ def generate_application_kit(title, company, description):
     except Exception as e:
         print(f"AI Generation error: {e}")
         return {
-            "match_score": "High Match",
-            "reason": "Strong alignment with Kartik's Power Platform, GenAI agent building, and operations leadership background.",
+            "match_score": "88%",
+            "reason": "Strong alignment with Kartik's Power Platform, GenAI agent building, and operations/analytics background.",
             "skills_gap": "None",
             "ats_keywords": [
                 "Power Platform", "Power Automate", "Power BI", "Power Apps", "Copilot Studio",
@@ -353,7 +384,7 @@ def create_dense_resume(filepath, kit):
     story.append(Spacer(1, 3))
 
     story.append(Paragraph("<b>WORK EXPERIENCE</b>", section_style))
-    story.append(Paragraph("<b>KPMG</b> | Analyst — Knowledge Management | Gurugram <i>(May 2024 – Present | 3 yrs 2 mos total exp)</i>", company_style))
+    story.append(Paragraph("<b>KPMG</b> | Analyst — Knowledge Management | Gurugram <i>(May 2024 – Present | ~3.5+ yrs total exp)</i>", company_style))
     story.append(Paragraph("<i>Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management & business development.</i>", body_style))
     
     story.append(Paragraph("Key Projects", subhead_style))
@@ -409,9 +440,8 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
     doc.build(story)
 
-# ----------------- TELEGRAM DISPATCHER (1 CLEAN TEXT MESSAGE, NO FILE CARDS) -----------------
-def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path):
-    # Escape Markdown characters in text variables to prevent parsing issues
+# ----------------- TELEGRAM DISPATCHER -----------------
+def send_telegram_alert(title, company, location, tier, exp_detected, url, ctc_label, kit, resume_path, cl_path):
     safe_title = title.replace("*", "").replace("_", " ")
     safe_company = company.replace("*", "").replace("_", " ")
     safe_location = location.replace("*", "").replace("_", " ")
@@ -420,17 +450,18 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
     cl_link = github_raw_link(cl_path)
 
     message_text = (
-        f"🎯 *New Job Matched for Kartik!*\n\n"
+        f"🎯 *New Qualified Job Matched for Kartik!*\n\n"
         f"📌 *Role:* {safe_title}\n"
         f"🏢 *Company:* {safe_company}\n"
-        f"📍 *Location:* {safe_location}\n"
+        f"📍 *Location:* {safe_location} ({tier})\n"
+        f"⏳ *Experience Required:* {exp_detected}\n"
         f"💰 *CTC Check:* {ctc_label}\n"
         f"📊 *Fit Score:* {kit.get('match_score')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
         f"🔗 [Apply Directly on Portal]({url})\n"
         f"📄 [Download Resume PDF]({resume_link})\n"
         f"📝 [Download Cover Letter PDF]({cl_link})\n\n"
-        f"_Links go live within ~1 min, once this run archives the PDFs to the repo._"
+        f"_Links go live within ~1 min once pushed to repo._"
     )
 
     endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -438,14 +469,13 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
     try:
         data = {
             "chat_id": CHAT_ID,
-            "text": message_text[:4096],  # Telegram text message limit
+            "text": message_text[:4096],
             "parse_mode": "Markdown",
-            "disable_web_page_preview": True  # keeps the message compact, no big link preview cards
+            "disable_web_page_preview": True
         }
         res = requests.post(endpoint, data=data)
         if res.status_code != 200:
             print(f"Telegram message warning: {res.text}")
-
     except Exception as e:
         print(f"Telegram dispatch error: {e}")
 
@@ -454,29 +484,40 @@ def run():
     init_tracker()
     all_jobs = []
 
+    # 1. Scrape targeted job boards with precise domain keywords
     try:
         board_jobs = scrape_jobs(
             site_name=["linkedin", "indeed", "glassdoor"],
-            search_term='"Product Manager" OR "Product Operations" OR "Operations Manager" OR "Operations Lead" OR "Power Platform" OR "Copilot" OR "Solutions Specialist"',
+            search_term='"Data Analyst" OR "Business Analyst" OR "Product Analyst" OR "Associate Product Manager" OR "Copilot Studio" OR "Power Automate" OR "Power Platform"',
             location="India",
-            results_wanted=20,
+            results_wanted=30,
             hours_old=24,
             country_indeed='india'
         )
         for _, row in board_jobs.iterrows():
             all_jobs.append(row.to_dict())
-        print(f"[DEBUG] Job boards (LinkedIn/Indeed/Glassdoor) returned {len(board_jobs)} raw listings.")
+        print(f"[DEBUG] Job boards returned {len(board_jobs)} raw listings.")
     except Exception as e:
-        print(f"[DEBUG] Scraper error (board jobs came back as 0 because of this): {e}")
+        print(f"[DEBUG] Scraper error: {e}")
 
+    # 2. Add ATS portal hits
     ats_jobs = search_enterprise_ats_jobs()
-    print(f"[DEBUG] Enterprise ATS search returned {len(ats_jobs)} raw listings. (SEARCH_API_KEY set: {bool(SEARCH_KEY)})")
+    print(f"[DEBUG] Enterprise ATS search returned {len(ats_jobs)} raw listings.")
     all_jobs.extend(ats_jobs)
 
     print(f"[DEBUG] Total raw candidates this run: {len(all_jobs)}")
 
-    skip_counts = {"no_url": 0, "already_seen": 0, "irrelevant_title": 0, "salary_or_location": 0}
-    dispatched = 0
+    skip_counts = {
+        "no_url": 0,
+        "already_seen": 0,
+        "senior_or_irrelevant": 0,
+        "exp_too_high": 0,
+        "invalid_location": 0,
+        "salary_check": 0
+    }
+    
+    tier_1_matches = []
+    tier_2_matches = []
 
     for job in all_jobs:
         url = str(job.get('job_url') or '')
@@ -486,6 +527,7 @@ def run():
         min_sal = job.get('min_amount')
         max_sal = job.get('max_amount')
         desc = str(job.get('description') or '')
+        full_text = f"{title} {desc}"
 
         if not url or url == 'nan':
             skip_counts["no_url"] += 1
@@ -495,22 +537,59 @@ def run():
             skip_counts["already_seen"] += 1
             continue
 
+        # Check 1: Role relevance & Seniority
         if not is_role_relevant(title):
-            skip_counts["irrelevant_title"] += 1
-            print(f"[DEBUG] Rejected (irrelevant_title): '{title}' @ {company}")
+            skip_counts["senior_or_irrelevant"] += 1
             continue
 
-        if not passes_salary_and_location(location, min_sal, max_sal):
-            skip_counts["salary_or_location"] += 1
-            print(f"[DEBUG] Rejected (salary_or_location): '{title}' @ {company} | loc={location} min={min_sal} max={max_sal}")
+        # Check 2: Experience Cap (Must not require 6+ / 8+ / 10+ years)
+        min_exp = extract_min_experience(full_text)
+        if min_exp is not None and min_exp > MAX_EXPERIENCE_CAP:
+            skip_counts["exp_too_high"] += 1
+            print(f"[DEBUG] Rejected (Exp {min_exp}+ yrs > {MAX_EXPERIENCE_CAP}): '{title}' @ {company}")
             continue
 
+        # Check 3: Location Tiering (Delhi-NCR/Remote > Bangalore/Hyd/Pune)
+        loc_valid, loc_tier = classify_location(location)
+        if not loc_valid:
+            skip_counts["invalid_location"] += 1
+            continue
+
+        # Check 4: Salary Threshold
+        if not passes_salary_check(loc_tier, min_sal, max_sal):
+            skip_counts["salary_check"] += 1
+            continue
+
+        exp_str = f"{min_exp}+ Years" if min_exp else "2–5 Years / Unspecified"
         ctc_label = f"₹{int(max_sal):,}" if (max_sal and max_sal > 0) else "Meets/Exceeds Location Threshold"
 
-        kit = generate_application_kit(title, company, desc)
+        job_payload = {
+            "title": title,
+            "company": company,
+            "location": location,
+            "tier": loc_tier,
+            "exp_detected": exp_str,
+            "url": url,
+            "ctc_label": ctc_label,
+            "desc": desc
+        }
 
-        safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:15]
-        safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)[:15]
+        if "Tier 1" in loc_tier:
+            tier_1_matches.append(job_payload)
+        else:
+            tier_2_matches.append(job_payload)
+
+    # Process Tier 1 first; fallback to Tier 2 if volume is low (< 3 matches)
+    dispatch_queue = list(tier_1_matches)
+    if len(tier_1_matches) < 3:
+        dispatch_queue.extend(tier_2_matches)
+
+    dispatched = 0
+    for qualified in dispatch_queue:
+        kit = generate_application_kit(qualified["title"], qualified["company"], qualified["desc"])
+
+        safe_company = re.sub(r'[^a-zA-Z0-9]', '_', qualified["company"])[:15]
+        safe_title = re.sub(r'[^a-zA-Z0-9]', '_', qualified["title"])[:15]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         resume_filename = f"Resume_{safe_company}_{safe_title}_{timestamp}.pdf"
@@ -520,30 +599,41 @@ def run():
         cl_path = os.path.join(DOCS_DIR, cl_filename)
 
         create_dense_resume(resume_path, kit)
-        create_dense_cover_letter(cl_path, title, company, kit)
+        create_dense_cover_letter(cl_path, qualified["title"], qualified["company"], kit)
 
-        # Dispatches 1 clean text-only alert with job details + PDF links
-        send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path)
+        send_telegram_alert(
+            title=qualified["title"],
+            company=qualified["company"],
+            location=qualified["location"],
+            tier=qualified["tier"],
+            exp_detected=qualified["exp_detected"],
+            url=qualified["url"],
+            ctc_label=qualified["ctc_label"],
+            kit=kit,
+            resume_path=resume_path,
+            cl_path=cl_path
+        )
 
         log_job(
-            url=url,
-            title=title,
-            company=company,
-            location=location,
-            ctc=ctc_label,
+            url=qualified["url"],
+            title=qualified["title"],
+            company=qualified["company"],
+            location=qualified["location"],
+            tier=qualified["tier"],
+            ctc=qualified["ctc_label"],
             score=kit.get("match_score"),
             resume_filename=resume_filename,
             cl_filename=cl_filename
         )
         dispatched += 1
-        print(f"Dispatched text alert for: {title} at {company}")
+        print(f"Dispatched text alert for: {qualified['title']} at {qualified['company']} ({qualified['tier']})")
 
     print(
-        f"[DEBUG] Run summary — dispatched: {dispatched}, "
-        f"skipped no_url: {skip_counts['no_url']}, "
-        f"already_seen: {skip_counts['already_seen']}, "
-        f"irrelevant_title: {skip_counts['irrelevant_title']}, "
-        f"salary_or_location: {skip_counts['salary_or_location']}"
+        f"\n[DEBUG] Run summary — Dispatched: {dispatched} | "
+        f"Tier 1 matches: {len(tier_1_matches)} | Tier 2 matches: {len(tier_2_matches)} | "
+        f"Skipped high exp: {skip_counts['exp_too_high']} | "
+        f"Skipped non-target roles: {skip_counts['senior_or_irrelevant']} | "
+        f"Skipped invalid location: {skip_counts['invalid_location']}"
     )
 
 if __name__ == "__main__":
