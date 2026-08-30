@@ -9,6 +9,12 @@ on:
 permissions:
   contents: write
 
+# Prevents two runs from racing to push the same binary files (xlsx/db) at once,
+# which is what caused the "Cannot merge binary files" rebase conflict.
+concurrency:
+  group: job-hunter-engine
+  cancel-in-progress: false
+
 jobs:
   run-engine:
     runs-on: ubuntu-latest
@@ -43,6 +49,19 @@ jobs:
         run: |
           mkdir -p generated_docs
 
+      # Sync to the very latest main BEFORE generating any new files.
+      # This is the key fix: previously the workflow fetched main, THEN ran the
+      # pipeline, THEN committed, and only pulled/rebased at the end — by which
+      # point another run may have already pushed a newer xlsx/db, causing a
+      # binary merge conflict that git can't auto-resolve. Resetting first means
+      # every run starts from a clean, current baseline.
+      - name: Sync to Latest Main
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+
       - name: Execute Pipeline & Generate PDFs
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -53,18 +72,17 @@ jobs:
 
       - name: Commit and Push Generated PDFs
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Pull latest remote changes first
-          git pull --rebase origin main || true
-          
-          # Stage PDFs and Excel tracker
-          git add -f generated_docs/*.pdf job_applications.xlsx
-          
+          # Stage PDFs, Excel tracker, and the SQLite tracker DB
+          git add -f generated_docs/*.pdf job_applications.xlsx job_tracker.db
+
           if git diff --staged --quiet; then
             echo "No new documents to commit."
           else
-            git commit -m "Auto-archive generated resumes & cover letters [skip ci]"
+            git commit -m "Auto-archive generated resumes, cover letters, and tracker [skip ci]"
+
+            # Fallback safety net: if another run somehow snuck a push in during
+            # this job, prefer OUR freshly generated files on conflict rather
+            # than failing the whole run.
+            git pull --rebase -X theirs origin main
             git push origin main
           fi
