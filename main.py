@@ -88,7 +88,7 @@ EXCLUDED_DOMAINS = [
 LOCATIONS_TIER_1 = [r"\bdelhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b", r"\bnoida\b", r"\bfaridabad\b", r"\bremote\b", r"\bwfh\b", r"\bwork from home\b"]
 LOCATIONS_TIER_2 = [r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b"]
 
-MAX_EXPERIENCE_CAP = 5.5  # Rejects roles asking >= 6 years minimum
+MAX_EXPERIENCE_CAP = 5.5
 
 EXCEL_FILE = "job_applications.xlsx"
 DOCS_DIR = "generated_docs"
@@ -167,18 +167,14 @@ def is_seniority_excluded(title: str) -> bool:
 
 def is_role_relevant(title: str) -> bool:
     t = title.lower()
-    # 1. Reject forbidden departments
     for bad in EXCLUDED_DOMAINS:
         if re.search(r'\b' + re.escape(bad) + r'\b', t):
             return False
-    # 2. Reject explicit senior roles
     if is_seniority_excluded(title):
         return False
-    # 3. Must match whitelisted role titles
     return any(re.search(good, t) for good in ROLES_WHITELIST)
 
 def extract_min_experience(text: str):
-    """Extracts the lowest stated years of experience (e.g., '8-10 years' -> 8)."""
     patterns = [
         r"(\d+)\s*(?:-|to|\+)\s*(?:\d+)?\s*(?:years|yrs)",
         r"(?:minimum|at least|over|requires?)\s*(\d+)\s*(?:years|yrs)"
@@ -253,7 +249,7 @@ def generate_application_kit(title, company, description):
     You are an expert executive resume writer, ATS optimization specialist, and career strategist
     tailoring application documents for Kartik Bhatt (~3.5 years of experience).
 
-    Candidate Profile (ground truth — do not invent achievements outside this):
+    Candidate Profile:
     {KARTIK_PROFILE}
 
     Target Job Opening:
@@ -265,47 +261,48 @@ def generate_application_kit(title, company, description):
     1. Read the JD Snippet and extract 10-15 exact keywords/phrases an ATS would scan for.
        Only include keywords Kartik's profile supports (Power Automate, Copilot Studio, SQL, Power BI, etc.).
     2. Weave these keywords into the summary, bullets, and cover letter.
-    3. Write quantified bullets pulled directly from Kartik's real KPMG and GlobalLogic experience.
+    3. Write quantified bullets pulled directly from Kartik's KPMG and GlobalLogic experience.
     4. Write a 4-paragraph tailored cover letter referencing {title} and {company}.
 
-    Return ONLY a valid JSON object matching this exact schema:
+    Return ONLY a valid JSON object matching this schema:
     {{
         "match_score": "e.g., 94%",
         "reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
         "skills_gap": "Any missing tool/skill or 'None'",
         "ats_keywords": ["keyword1", "keyword2", "... 10-15 exact JD-relevant keywords"],
-        "tailored_summary": "A comprehensive 4-5 line Professional Summary showcasing 3.5+ years of experience across KPMG and GlobalLogic, tailored directly to {title} at {company}.",
+        "tailored_summary": "A comprehensive 4-5 line Professional Summary tailored directly to {title} at {company}.",
         "kpmg_project_bullets": [
-            "Detailed, quantified bullet on the Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved, framed for {title}",
-            "Detailed bullet on the SPO migration: 45+ pillars, 3 Power Automate flows, change management, permission governance",
-            "Detailed bullet on the VBA macro repository automation: 30,000+ assets, 485 hrs saved",
-            "Detailed bullet on the multi-modal Copilot agent: messy data cleanup, field drafting, metadata tagging, 325 hrs saved",
-            "Detailed bullet on contact management system administration for 10,000+ members and 5,000+ content assets across 15 libraries"
+            "Quantified bullet on Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved",
+            "Quantified bullet on SPO migration: 45+ pillars, 3 Power Automate flows, change management",
+            "Quantified bullet on VBA macro repository: 30,000+ assets, 485 hrs saved",
+            "Quantified bullet on multi-modal Copilot agent: messy data cleanup, field drafting, metadata tagging, 325 hrs saved",
+            "Quantified bullet on contact management administration for 10,000+ members and 5,000+ assets"
         ],
         "kpmg_bd_bullets": [
             "Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.",
-            "Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages aligned with enterprise brand guidelines.",
+            "Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages aligned with brand guidelines.",
             "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
-            "Catered to 50+ SharePoint governance and administration requests spanning term store, metadata, and permission-level management."
+            "Catered to 50+ SharePoint governance and administration requests."
         ],
         "globallogic_bullets": [
-            "Designed best practices, process docs, and QA workflows for a Google GenAI dataset project used for Android screen search.",
-            "Designed and implemented QA processes for data entry, reducing errors by 25% and improving data accuracy.",
-            "Managed process documentation across 10+ engagements, improving onshore project delivery quality from 74% to 95%.",
-            "QA'd 500+ pieces weekly and led 3 pilot projects to successful completion against competition from major MNCs."
+            "Designed best practices, process docs, and QA workflows for Google GenAI Android search datasets.",
+            "Designed and implemented QA processes for data entry, reducing errors by 25%.",
+            "Managed process documentation across 10+ engagements, lifting delivery quality from 74% to 95%.",
+            "QA'd 500+ pieces weekly and led 3 pilot projects to completion against major MNC competition."
         ],
         "cover_letter_subject": "Subject: Driving Operational Excellence & Scalable Solutions as {title}",
         "cover_letter_paragraphs": [
-            "Opening paragraph: enthusiasm for {title} at {company}, a specific hook tied to {company}'s mission or product from the JD, and a 1-line summary of the 3.5+ year background.",
-            "Second paragraph: 2-3 concrete, quantified KPMG achievements mapped directly to what the JD asks for.",
+            "Opening paragraph: enthusiasm for {title} at {company}, JD hook, and 1-line summary of 3.5+ year background.",
+            "Second paragraph: 2-3 concrete KPMG achievements mapped directly to the JD requirements.",
             "Third paragraph: GlobalLogic experience mapped to relevant JD requirements.",
-            "Closing paragraph: connect Kartik's skill set to {company}'s goals, restate enthusiasm, thank the reader, and invite next steps."
+            "Closing paragraph: connecting skills to {company}'s goals, restating enthusiasm, thanking reader, inviting next steps."
         ]
     }}
     """
     try:
+        # Updated to gemini-3.6-flash per current SDK requirements
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -321,7 +318,7 @@ def generate_application_kit(title, company, description):
                 "GenAI Agents", "SQL", "Process Automation", "Stakeholder Management",
                 "Change Management", "SharePoint Online", "Data Analytics", "RFP/RFI Management"
             ],
-            "tailored_summary": f"Analytical and solutions-driven professional with 3.5+ years of experience across KPMG and GlobalLogic specializing in Power Platform automation, Copilot AI agents, SQL-driven data analytics, and cross-functional stakeholder management, tailored for the {title} role at {company}.",
+            "tailored_summary": f"Analytical and solutions-driven professional with 3.5+ years of experience across KPMG and GlobalLogic specializing in Power Platform automation, Copilot AI agents, SQL-driven data analytics, and cross-functional stakeholder management.",
             "kpmg_project_bullets": [
                 "Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.",
                 "Built end-to-end migration of Excel-based data collection for 45+ pillars to automated SPO lists, including 3 Power Automate flows for alerts, change management, and permission governance.",
@@ -484,13 +481,13 @@ def run():
     init_tracker()
     all_jobs = []
 
-    # 1. Scrape targeted job boards with precise domain keywords
+    # 1. Scrape targeted job boards (Removed Glassdoor to avoid 403 errors on CI)
     try:
         board_jobs = scrape_jobs(
-            site_name=["linkedin", "indeed", "glassdoor"],
+            site_name=["linkedin", "indeed"],
             search_term='"Data Analyst" OR "Business Analyst" OR "Product Analyst" OR "Associate Product Manager" OR "Copilot Studio" OR "Power Automate" OR "Power Platform"',
             location="India",
-            results_wanted=30,
+            results_wanted=35,
             hours_old=24,
             country_indeed='india'
         )
@@ -537,25 +534,25 @@ def run():
             skip_counts["already_seen"] += 1
             continue
 
-        # Check 1: Role relevance & Seniority
+        # Role & Seniority Validation
         if not is_role_relevant(title):
             skip_counts["senior_or_irrelevant"] += 1
             continue
 
-        # Check 2: Experience Cap (Must not require 6+ / 8+ / 10+ years)
+        # Experience Cap Filtering
         min_exp = extract_min_experience(full_text)
         if min_exp is not None and min_exp > MAX_EXPERIENCE_CAP:
             skip_counts["exp_too_high"] += 1
             print(f"[DEBUG] Rejected (Exp {min_exp}+ yrs > {MAX_EXPERIENCE_CAP}): '{title}' @ {company}")
             continue
 
-        # Check 3: Location Tiering (Delhi-NCR/Remote > Bangalore/Hyd/Pune)
+        # Location Tiering Check
         loc_valid, loc_tier = classify_location(location)
         if not loc_valid:
             skip_counts["invalid_location"] += 1
             continue
 
-        # Check 4: Salary Threshold
+        # Salary Check
         if not passes_salary_check(loc_tier, min_sal, max_sal):
             skip_counts["salary_check"] += 1
             continue
@@ -579,7 +576,7 @@ def run():
         else:
             tier_2_matches.append(job_payload)
 
-    # Process Tier 1 first; fallback to Tier 2 if volume is low (< 3 matches)
+    # Prioritize Tier 1; fallback to Tier 2 if volume is low
     dispatch_queue = list(tier_1_matches)
     if len(tier_1_matches) < 3:
         dispatch_queue.extend(tier_2_matches)
