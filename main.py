@@ -359,7 +359,7 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
     doc.build(story)
 
-# ----------------- TELEGRAM DISPATCHER (1 SINGLE COMPACT POST) -----------------
+# ----------------- TELEGRAM DISPATCHER (1 CLEAN TEXT MESSAGE, NO FILE CARDS) -----------------
 def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path):
     # Escape Markdown characters in text variables to prevent parsing issues
     safe_title = title.replace("*", "").replace("_", " ")
@@ -369,49 +369,30 @@ def send_telegram_alert(title, company, location, url, ctc_label, kit, resume_pa
     resume_link = github_raw_link(resume_path)
     cl_link = github_raw_link(cl_path)
 
-    caption_text = (
-        f"🎯 *New Job Matched for Kartik!*\n\n"
+    message_text = (
         f"📌 *Role:* {safe_title}\n"
         f"🏢 *Company:* {safe_company}\n"
         f"📍 *Location:* {safe_location}\n"
         f"💰 *CTC Check:* {ctc_label}\n"
         f"📊 *Fit Score:* {kit.get('match_score')}\n"
-        f"💡 *Why You Match:* {kit.get('reason')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
         f"🔗 [Apply Directly on Portal]({url})\n"
         f"📄 [Download Resume PDF]({resume_link})\n"
         f"📝 [Download Cover Letter PDF]({cl_link})\n\n"
-        f"📎 *Attached:* Tailored Resume & Cover Letter PDFs (also usable directly below)\n"
-        f"_Links go live within ~1 min, once this run archives the PDFs to the repo._"
     )
 
-    endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
+    endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
     try:
-        with open(resume_path, 'rb') as doc1, open(cl_path, 'rb') as doc2:
-            media = [
-                {
-                    "type": "document",
-                    "media": "attach://resume",
-                    "caption": caption_text[:1024],  # Telegram caption character limit safe
-                    "parse_mode": "Markdown"
-                },
-                {
-                    "type": "document",
-                    "media": "attach://cover_letter"
-                }
-            ]
-            files = {
-                "resume": (os.path.basename(resume_path), doc1, 'application/pdf'),
-                "cover_letter": (os.path.basename(cl_path), doc2, 'application/pdf')
-            }
-            data = {
-                "chat_id": CHAT_ID,
-                "media": json.dumps(media)
-            }
-            res = requests.post(endpoint, data=data, files=files)
-            if res.status_code != 200:
-                print(f"Telegram media group warning: {res.text}")
+        data = {
+            "chat_id": CHAT_ID,
+            "text": message_text[:4096],  # Telegram text message limit
+            "parse_mode": "Markdown",
+            "disable_web_page_preview": True  # keeps the message compact, no big link preview cards
+        }
+        res = requests.post(endpoint, data=data)
+        if res.status_code != 200:
+            print(f"Telegram message warning: {res.text}")
 
     except Exception as e:
         print(f"Telegram dispatch error: {e}")
@@ -473,7 +454,7 @@ def run():
         create_dense_resume(resume_path, kit)
         create_dense_cover_letter(cl_path, title, company, kit)
 
-        # Dispatches 1 single compact post with both PDFs
+        # Dispatches 1 clean text-only alert with job details + PDF links
         send_telegram_alert(title, company, location, url, ctc_label, kit, resume_path, cl_path)
 
         log_job(
@@ -486,7 +467,7 @@ def run():
             resume_filename=resume_filename,
             cl_filename=cl_filename
         )
-        print(f"Dispatched single bundled post for: {title} at {company}")
+        print(f"Dispatched text alert for: {title} at {company}")
 
 if __name__ == "__main__":
     run()
