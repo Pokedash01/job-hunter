@@ -1,13 +1,12 @@
-name: 24/7 Job Search Engine
+name: 24/7 Job Search & Application Engine
 
 on:
   schedule:
-    # Runs every 4 hours automatically
     - cron: '0 */4 * * *'
-  workflow_dispatch: # Allows manual run button
+  workflow_dispatch:
 
 jobs:
-  run-search:
+  run-engine:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -18,23 +17,30 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Caches SQLite DB across runs to prevent repeat alerts
-      - name: Restore Job Database Cache
+      - name: Restore Application Tracking Cache
         uses: actions/cache@v4
         with:
-          path: job_tracker.db
-          key: job-db-${{ github.run_id }}
+          path: |
+            job_tracker.db
+            job_applications.xlsx
+          key: tracker-cache-${{ github.run_id }}
           restore-keys: |
-            job-db-
+            tracker-cache-
 
       - name: Install Dependencies
         run: |
-          pip install python-jobspy google-genai requests pandas
+          pip install python-jobspy google-genai requests pandas openpyxl
 
-      - name: Run Job Hunter Engine
+      - name: Execute Pipeline
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
         run: python main.py
+
+      - name: Upload Excel Tracker as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: job_applications_tracker
+          path: job_applications.xlsx
