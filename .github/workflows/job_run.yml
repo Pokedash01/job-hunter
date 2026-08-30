@@ -75,7 +75,16 @@ jobs:
           # (company + role + timestamp), so this is always a pure
           # "add new file" — never a modify or delete — meaning it
           # can never produce a merge/rebase conflict.
-          git add -f generated_docs/*.pdf
+
+          shopt -s nullglob
+          pdf_files=(generated_docs/*.pdf)
+
+          if [ ${#pdf_files[@]} -eq 0 ]; then
+            echo "No PDFs generated this run (0 jobs matched) — nothing to commit."
+            exit 0
+          fi
+
+          git add -f "${pdf_files[@]}"
 
           if git diff --staged --quiet; then
             echo "No new documents to commit."
