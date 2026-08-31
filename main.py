@@ -250,6 +250,102 @@ def format_salary_range(min_sal, max_sal) -> str:
     return "Not Disclosed"
 
 
+# ----------------- SALARY ESTIMATION FALLBACK (AmbitionBox / Glassdoor) -----------------
+_SALARY_ESTIMATE_CACHE = {}
+
+
+def _parse_salary_range_lpa(text: str):
+    """
+    Extracts a (min, max) salary range in Lakhs Per Annum (LPA) from free text
+    such as an AmbitionBox/Glassdoor search snippet. Returns None if no figure found.
+    """
+    text = text.replace(",", "")
+
+    # "6 - 9 Lakhs" / "6-9 LPA" / "₹6 Lakhs to ₹9.5 Lakhs" / "₹6 - ₹9 Lacs P.A."
+    m = re.search(
+        r"(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d+)?)\s*(?:Lakhs?|Lacs?|LPA|L\b)?\s*(?:-|to|–)\s*"
+        r"(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d+)?)\s*(?:Lakhs?|Lacs?|LPA|L\b)",
+        text, flags=re.IGNORECASE
+    )
+    if m:
+        low, high = float(m.group(1)), float(m.group(2))
+        return (low, high) if low <= high else (high, low)
+
+    # Raw rupee range e.g. "₹600000 - ₹900000" -> convert to LPA
+    m = re.search(r"₹\s*(\d{5,7})\s*(?:-|to|–)\s*₹\s*(\d{5,7})", text)
+    if m:
+        low, high = int(m.group(1)) / 100000, int(m.group(2)) / 100000
+        return (low, high) if low <= high else (high, low)
+
+    # Single figure e.g. "average salary of ₹8.5 LPA"
+    m = re.search(
+        r"(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d+)?)\s*(?:Lakhs?|Lacs?|LPA|L\b)",
+        text, flags=re.IGNORECASE
+    )
+    if m:
+        return (float(m.group(1)), None)
+
+    return None
+
+
+def estimate_salary_from_web(title: str, company: str):
+    """
+    Fallback salary lookup used when a job listing doesn't disclose CTC.
+    Queries AmbitionBox and Glassdoor (via the existing SearchAPI.io key) and
+    extracts a salary range from the search result snippets.
+
+    Returns a formatted string like "₹6 - ₹9 LPA (est. via AmbitionBox)",
+    or None if nothing usable was found.
+    """
+    if not SEARCH_KEY or not company or company.strip().lower() in ("", "nan"):
+        return None
+
+    cache_key = (company.strip().lower(), title.strip().lower())
+    if cache_key in _SALARY_ESTIMATE_CACHE:
+        return _SALARY_ESTIMATE_CACHE[cache_key]
+
+    queries = [
+        (f'site:ambitionbox.com "{company}" "{title}" salary', "AmbitionBox"),
+        (f'site:ambitionbox.com "{company}" salaries', "AmbitionBox"),
+        (f'site:glassdoor.co.in "{company}" "{title}" salaries', "Glassdoor"),
+        (f'site:glassdoor.com "{company}" salaries India', "Glassdoor"),
+    ]
+
+    result = None
+    for query, source in queries:
+        try:
+            res = requests.get(
+                "https://www.searchapi.io/api/v1/search",
+                params={
+                    "engine": "google",
+                    "q": query,
+                    "api_key": SEARCH_KEY,
+                    "gl": "in",
+                    "hl": "en",
+                    "num": 5
+                },
+                timeout=15
+            ).json()
+
+            for item in res.get("organic_results", []):
+                blob = f"{item.get('title', '')} {item.get('snippet', '')}"
+                parsed = _parse_salary_range_lpa(blob)
+                if parsed:
+                    low, high = parsed
+                    if high:
+                        result = f"₹{low:g} - ₹{high:g} LPA (est. via {source})"
+                    else:
+                        result = f"₹{low:g} LPA (est. via {source})"
+                    break
+            if result:
+                break
+        except Exception as e:
+            print(f"Salary estimate error ({source}) for {company}: {e}")
+
+    _SALARY_ESTIMATE_CACHE[cache_key] = result
+    return result
+
+
 # ----------------- ENTERPRISE ATS SEARCH -----------------
 def search_enterprise_ats_jobs():
     ats_queries = [
@@ -614,6 +710,12 @@ def run():
 
         exp_str = f"{min_exp}+ Years" if min_exp else "2–5 Years / Unspecified"
         salary_range = format_salary_range(min_sal, max_sal)
+
+        # Fallback: listing didn't disclose CTC — try to estimate it from AmbitionBox/Glassdoor
+        if salary_range == "Not Disclosed":
+            estimated_range = estimate_salary_from_web(title, company)
+            if estimated_range:
+                salary_range = estimated_range
 
         job_payload = {
             "title": title,
