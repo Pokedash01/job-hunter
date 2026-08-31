@@ -98,6 +98,19 @@ EXCEL_COLUMNS = [
     "Location", "Resume Link", "Cover Letter Link", "Job Link"
 ]
 
+# job_applications.xlsx (above) is cache-only and untracked by git -- it's
+# invisible unless you download an Actions artifact or open a Codespace.
+#
+# LOG_FILE is a second, separate file that exists purely so you have
+# something browsable/committed in the actual repo. It is NEVER read for
+# dedupe -- is_seen() only ever looks at job_applications.xlsx. This file
+# is pure write-only history: every dispatched job gets appended here too,
+# and it gets git-committed by the workflow alongside the generated PDFs.
+# CSV (not xlsx) on purpose: GitHub renders .csv as a browsable table
+# directly on github.com, and appending a row is a single line write
+# instead of a full read/rewrite of a binary workbook every run.
+LOG_FILE = "job_log.csv"
+
 
 def github_raw_link(local_path: str) -> str:
     """Builds a raw.githubusercontent.com direct-download link for a file in this repo."""
@@ -158,6 +171,26 @@ def log_job(title, company, salary_range, fit_score, location, resume_link, cove
         df.to_excel(EXCEL_FILE, index=False)
     except Exception as e:
         print(f"Excel logging error: {e}")
+
+
+def append_to_log(title, company, salary_range, fit_score, location, resume_link, cover_letter_link, job_link):
+    """Appends one row to job_log.csv -- the git-tracked, human-browsable
+    history file. Purely additive: never read, never used for dedupe, and
+    safe to call every time a job is dispatched regardless of what
+    is_seen()/log_job() decide about job_applications.xlsx."""
+    import csv
+    file_exists = os.path.exists(LOG_FILE)
+    try:
+        with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(EXCEL_COLUMNS)
+            writer.writerow([
+                title, company, salary_range, fit_score,
+                location, resume_link, cover_letter_link, job_link
+            ])
+    except Exception as e:
+        print(f"job_log.csv logging error: {e}")
 
 
 # ----------------- SMART SCREENER & FILTERS -----------------
@@ -636,6 +669,17 @@ def run():
         )
 
         log_job(
+            title=qualified["title"],
+            company=qualified["company"],
+            salary_range=qualified["salary_range"],
+            fit_score=kit.get("match_score"),
+            location=f'{qualified["location"]} ({qualified["tier"]})',
+            resume_link=resume_link,
+            cover_letter_link=cl_link,
+            job_link=qualified["url"]
+        )
+
+        append_to_log(
             title=qualified["title"],
             company=qualified["company"],
             salary_range=qualified["salary_range"],
