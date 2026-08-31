@@ -3,6 +3,8 @@ import re
 import json
 import requests
 import pandas as pd
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 from datetime import datetime
 from jobspy import scrape_jobs
 from google import genai
@@ -18,7 +20,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-SEARCH_KEY = os.environ.get("SEARCH_API_KEYSEARCH_API_KEY")
+SEARCH_KEY = os.environ.get("SEARCH_API_KEY") or os.environ.get("SEARCH_API_KEYSEARCH_API_KEY")
 
 client = genai.Client(api_key=GEMINI_KEY)
 
@@ -90,40 +92,20 @@ os.makedirs(DOCS_DIR, exist_ok=True)
 GITHUB_REPO = "Pokedash01/job-hunter"
 GITHUB_BRANCH = "main"
 
-# Column order used across the entire xlsx tracker/store. This single file
-# replaces job_tracker.db entirely -- it is both the dedupe log and the
-# human-readable application tracker.
 EXCEL_COLUMNS = [
     "Title", "Company", "Salary Range", "Fit Score",
     "Location", "Resume Link", "Cover Letter Link", "Job Link"
 ]
-
-# job_applications.xlsx (above) is cache-only and untracked by git -- it's
-# invisible unless you download an Actions artifact or open a Codespace.
-#
-# LOG_FILE is a second, separate file that exists purely so you have
-# something browsable/committed in the actual repo. It is NEVER read for
-# dedupe -- is_seen() only ever looks at job_applications.xlsx. This file
-# is pure write-only history: every dispatched job gets appended here too,
-# and it gets git-committed by the workflow alongside the generated PDFs.
-# CSV (not xlsx) on purpose: GitHub renders .csv as a browsable table
-# directly on github.com, and appending a row is a single line write
-# instead of a full read/rewrite of a binary workbook every run.
 LOG_FILE = "job_log.csv"
 
 
 def github_raw_link(local_path: str) -> str:
-    """Builds a raw.githubusercontent.com direct-download link for a file in this repo."""
     clean_path = local_path.replace(os.sep, "/").lstrip("./")
     return f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{clean_path}"
 
 
-# ----------------- STORAGE ENGINE (xlsx only, no sqlite) -----------------
+# ----------------- STORAGE ENGINE -----------------
 def init_tracker():
-    """Creates job_applications.xlsx with the required headers if it doesn't exist yet.
-    There is no longer any sqlite database -- the xlsx file itself is the single
-    source of truth for both the human tracker and the 'have I seen this job' check.
-    """
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=EXCEL_COLUMNS)
         df.to_excel(EXCEL_FILE, index=False)
@@ -134,7 +116,6 @@ def _load_tracker() -> pd.DataFrame:
         return pd.DataFrame(columns=EXCEL_COLUMNS)
     try:
         df = pd.read_excel(EXCEL_FILE)
-        # Guard against a legacy/partial file missing expected columns
         for col in EXCEL_COLUMNS:
             if col not in df.columns:
                 df[col] = None
@@ -145,7 +126,6 @@ def _load_tracker() -> pd.DataFrame:
 
 
 def is_seen(url: str) -> bool:
-    """Dedupe check against the 'Job Link' column of the xlsx tracker."""
     df = _load_tracker()
     if df.empty:
         return False
@@ -153,8 +133,6 @@ def is_seen(url: str) -> bool:
 
 
 def log_job(title, company, salary_range, fit_score, location, resume_link, cover_letter_link, job_link):
-    """Appends one row to job_applications.xlsx. This is the only persistence
-    step in the pipeline now -- sqlite3/job_tracker.db has been removed."""
     try:
         df = _load_tracker()
         new_row = {
@@ -174,10 +152,6 @@ def log_job(title, company, salary_range, fit_score, location, resume_link, cove
 
 
 def append_to_log(title, company, salary_range, fit_score, location, resume_link, cover_letter_link, job_link):
-    """Appends one row to job_log.csv -- the git-tracked, human-browsable
-    history file. Purely additive: never read, never used for dedupe, and
-    safe to call every time a job is dispatched regardless of what
-    is_seen()/log_job() decide about job_applications.xlsx."""
     import csv
     file_exists = os.path.exists(LOG_FILE)
     try:
@@ -230,132 +204,108 @@ def classify_location(location_str: str):
     return False, "Out of Scope Location"
 
 
-def passes_salary_check(location_tier: str, min_sal, max_sal):
-    min_required = 1000000 if "Tier 1" in location_tier else 1500000
-    if max_sal and max_sal > 0:
-        return max_sal >= min_required
-    return True
+# ----------------- LLM SALARY ESTIMATION & FLOOR CHECK -----------------
+def get_salary_range_and_check(title: str, company: str, location: str, description: str, tier: str, min_sal=None, max_sal=None):
+    min_floor = 1000000 if "Tier 1" in tier else 1500000
+
+    if max_sal and float(max_sal) > 0:
+        actual_min = float(min_sal) if min_sal and float(min_sal) > 0 else float(max_sal) * 0.75
+        actual_max = float(max_sal)
+        if actual_max < min_floor:
+            return False, ""
+        return True, f"₹{actual_min/100000:.1f} - ₹{actual_max/100000:.1f} LPA"
+
+    prompt = f"""
+You are an expert Indian tech compensation analyst.
+Analyze the following role for Kartik Bhatt (~3.5 YOE, Power Platform, Analytics, GenAI Agents):
+
+Job Title: {title}
+Company: {company}
+Location: {location} ({tier})
+Job Description Snippet: {description[:2000]}
+
+Task:
+1. Extract any explicitly mentioned salary.
+2. If NO salary is disclosed, estimate the realistic 25th-75th percentile market base CTC in INR for a 3-4 YOE candidate in India for this company/role.
+3. Determine `passes_floor`: true if max_inr >= {min_floor}, false otherwise.
+
+Return ONLY a valid JSON object matching this schema:
+{{
+  "min_inr": 1200000,
+  "max_inr": 1600000,
+  "display_range": "₹12 - ₹16 LPA (Est.)",
+  "passes_floor": true
+}}
+"""
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        data = json.loads(response.text)
+        if not data.get("passes_floor", True):
+            return False, ""
+        return True, data.get("display_range", f"₹{min_floor/100000:.0f}+ LPA (Est.)")
+    except Exception as e:
+        print(f"Salary check error for {title} @ {company}: {e}")
+        fallback_lpa = 12 if "Tier 1" in tier else 16
+        return True, f"₹{fallback_lpa} - ₹{fallback_lpa+4} LPA (Est.)"
 
 
-def format_salary_range(min_sal, max_sal) -> str:
-    """Builds a human-readable salary range string for the xlsx tracker."""
-    has_min = min_sal and float(min_sal) > 0
-    has_max = max_sal and float(max_sal) > 0
-    if has_min and has_max:
-        return f"₹{int(min_sal):,} - ₹{int(max_sal):,}"
-    if has_max:
-        return f"Up to ₹{int(max_sal):,}"
-    if has_min:
-        return f"₹{int(min_sal):,}+"
-    return "Not Disclosed"
+# ----------------- DIRECT ATS & COMPANY PORTAL SEARCH -----------------
+def extract_company_from_url(url: str) -> str:
+    """Extracts a clean company name from direct career portal URLs."""
+    try:
+        domain = urlparse(url).netloc.lower()
+        path = urlparse(url).path.lower()
+        
+        # e.g., company.greenhouse.io or company.wd3.myworkdayjobs.com
+        parts = domain.split(".")
+        if "greenhouse.io" in domain or "lever.co" in domain or "ashbyhq.com" in domain or "smartrecruiters.com" in domain:
+            if parts[0] not in ["boards", "job-boards", "jobs", "www"]:
+                return parts[0].replace("-", " ").capitalize()
+            elif len(path.split("/")) > 1:
+                return path.split("/")[1].replace("-", " ").capitalize()
+        elif "myworkdayjobs.com" in domain:
+            return parts[0].split("-")[0].replace("-", " ").capitalize()
+    except Exception:
+        pass
+    return "Enterprise Portal"
 
 
-# ----------------- SALARY ESTIMATION FALLBACK (AmbitionBox / Glassdoor) -----------------
-_SALARY_ESTIMATE_CACHE = {}
+def fetch_portal_description(url: str) -> str:
+    """Extracts raw text content from direct ATS job pages."""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        res = requests.get(url, headers=headers, timeout=8)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header"]):
+                tag.decompose()
+            text = ' '.join(soup.stripped_strings)
+            return text[:4000]
+    except Exception as e:
+        print(f"Error fetching JD from portal {url}: {e}")
+    return ""
 
 
-def _parse_salary_range_lpa(text: str):
-    """
-    Extracts a (min, max) salary range in Lakhs Per Annum (LPA) from free text
-    such as an AmbitionBox/Glassdoor search snippet. Returns None if no figure found.
-    """
-    text = text.replace(",", "")
-
-    # "6 - 9 Lakhs" / "6-9 LPA" / "₹6 Lakhs to ₹9.5 Lakhs" / "₹6 - ₹9 Lacs P.A."
-    m = re.search(
-        r"(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d+)?)\s*(?:Lakhs?|Lacs?|LPA|L\b)?\s*(?:-|to|–)\s*"
-        r"(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d+)?)\s*(?:Lakhs?|Lacs?|LPA|L\b)",
-        text, flags=re.IGNORECASE
-    )
-    if m:
-        low, high = float(m.group(1)), float(m.group(2))
-        return (low, high) if low <= high else (high, low)
-
-    # Raw rupee range e.g. "₹600000 - ₹900000" -> convert to LPA
-    m = re.search(r"₹\s*(\d{5,7})\s*(?:-|to|–)\s*₹\s*(\d{5,7})", text)
-    if m:
-        low, high = int(m.group(1)) / 100000, int(m.group(2)) / 100000
-        return (low, high) if low <= high else (high, low)
-
-    # Single figure e.g. "average salary of ₹8.5 LPA"
-    m = re.search(
-        r"(?:₹|Rs\.?|INR)?\s*(\d+(?:\.\d+)?)\s*(?:Lakhs?|Lacs?|LPA|L\b)",
-        text, flags=re.IGNORECASE
-    )
-    if m:
-        return (float(m.group(1)), None)
-
-    return None
-
-
-def estimate_salary_from_web(title: str, company: str):
-    """
-    Fallback salary lookup used when a job listing doesn't disclose CTC.
-    Queries AmbitionBox and Glassdoor (via the existing SearchAPI.io key) and
-    extracts a salary range from the search result snippets.
-
-    Returns a formatted string like "₹6 - ₹9 LPA (est. via AmbitionBox)",
-    or None if nothing usable was found.
-    """
-    if not SEARCH_KEY or not company or company.strip().lower() in ("", "nan"):
-        return None
-
-    cache_key = (company.strip().lower(), title.strip().lower())
-    if cache_key in _SALARY_ESTIMATE_CACHE:
-        return _SALARY_ESTIMATE_CACHE[cache_key]
-
-    queries = [
-        (f'site:ambitionbox.com "{company}" "{title}" salary', "AmbitionBox"),
-        (f'site:ambitionbox.com "{company}" salaries', "AmbitionBox"),
-        (f'site:glassdoor.co.in "{company}" "{title}" salaries', "Glassdoor"),
-        (f'site:glassdoor.com "{company}" salaries India', "Glassdoor"),
-    ]
-
-    result = None
-    for query, source in queries:
-        try:
-            res = requests.get(
-                "https://www.searchapi.io/api/v1/search",
-                params={
-                    "engine": "google",
-                    "q": query,
-                    "api_key": SEARCH_KEY,
-                    "gl": "in",
-                    "hl": "en",
-                    "num": 5
-                },
-                timeout=15
-            ).json()
-
-            for item in res.get("organic_results", []):
-                blob = f"{item.get('title', '')} {item.get('snippet', '')}"
-                parsed = _parse_salary_range_lpa(blob)
-                if parsed:
-                    low, high = parsed
-                    if high:
-                        result = f"₹{low:g} - ₹{high:g} LPA (est. via {source})"
-                    else:
-                        result = f"₹{low:g} LPA (est. via {source})"
-                    break
-            if result:
-                break
-        except Exception as e:
-            print(f"Salary estimate error ({source}) for {company}: {e}")
-
-    _SALARY_ESTIMATE_CACHE[cache_key] = result
-    return result
-
-
-# ----------------- ENTERPRISE ATS SEARCH -----------------
 def search_enterprise_ats_jobs():
+    """
+    Searches enterprise ATS systems and direct company career portals for roles in India.
+    """
     ats_queries = [
-        'site:myworkdayjobs.com ("Business Analyst" OR "Data Analyst" OR "Associate Product Manager" OR "Power Platform") India',
-        'site:greenhouse.io ("Product Analyst" OR "Copilot Studio" OR "Process Automation" OR "Business Analyst") India',
-        'site:jobs.lever.co ("Product Analyst" OR "APM" OR "Power Automate Developer" OR "Operations Analyst") India',
-        'site:jobs.ashbyhq.com ("Product Analyst" OR "Data Analyst" OR "Business Analyst") India'
+        'site:myworkdayjobs.com ("Data Analyst" OR "Business Analyst" OR "Power Platform" OR "Copilot Studio") ("India" OR "Gurgaon" OR "Gurugram" OR "Noida" OR "Bangalore")',
+        'site:boards.greenhouse.io OR site:job-boards.greenhouse.io ("Product Analyst" OR "Data Analyst" OR "Process Automation") ("India" OR "Remote" OR "Gurgaon" OR "Bangalore")',
+        'site:jobs.lever.co ("Data Analyst" OR "Business Analyst" OR "APM" OR "Power Automate") ("India" OR "Remote" OR "Gurugram")',
+        'site:jobs.ashbyhq.com ("Product Analyst" OR "Data Analyst" OR "Analytics Engineer" OR "Business Analyst") ("India" OR "Remote")',
+        'site:jobs.smartrecruiters.com ("Process Automation" OR "Power Platform" OR "Data Analyst" OR "Operations Analyst") India',
+        '(site:careers.google.com OR site:amazon.jobs OR site:jobs.siemens.com OR site:careers.microsoft.com) ("Analyst" OR "Automation") ("Gurugram" OR "Noida" OR "Delhi" OR "Bangalore")'
     ]
+    
     discovered = []
     if not SEARCH_KEY:
+        print("[DEBUG] No SEARCH_KEY found. Skipping direct company portal search.")
         return discovered
 
     for query in ats_queries:
@@ -367,25 +317,34 @@ def search_enterprise_ats_jobs():
                 "api_key": SEARCH_KEY,
                 "gl": "in",
                 "hl": "en",
-                "num": 8
+                "num": 10
             }
             res = requests.get(url, params=params, timeout=15).json()
             for item in res.get("organic_results", []):
                 link = item.get("link", "")
-                title = item.get("title", "Role Opening")
+                raw_title = item.get("title", "")
                 snippet = item.get("snippet", "")
+                
+                # Clean title
+                title = re.sub(r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs).*", "", raw_title, flags=re.IGNORECASE).strip()
+                company = extract_company_from_url(link)
+                
                 if link and is_role_relevant(title):
+                    # Fetch direct page context or use snippet
+                    full_desc = fetch_portal_description(link) or snippet
+                    
                     discovered.append({
                         "title": title,
-                        "company": item.get("displayed_link", "Enterprise Portal").split(".")[0],
+                        "company": company,
                         "job_url": link,
-                        "location": "Delhi NCR / Remote / Hybrid",
-                        "description": snippet,
+                        "location": "Delhi NCR / Remote / Bangalore",
+                        "description": full_desc,
                         "min_amount": 0,
                         "max_amount": 0
                     })
         except Exception as e:
-            print(f"ATS search error for query {query}: {e}")
+            print(f"ATS search error for query '{query}': {e}")
+            
     return discovered
 
 
@@ -406,23 +365,21 @@ JD Snippet: {description[:2200]}
 CRITICAL RULES FOR RESUME VS COVER LETTER:
 1. RESUME PROFESSIONAL SUMMARY RULES:
 - DO NOT mention "{company}" or "seeking to work at {company}" anywhere in the tailored_summary.
-- The summary represents Kartik's personal executive profile. Frame it around his 3.5+ years of experience, core domains (Power Platform, GenAI Agents, Data/Product Analytics, Automation), and quantifiable business impact.
-- Align phrasing to the domain of {title} without sounding like a job application objective.
+- Frame it around his 3.5+ years of experience, core domains (Power Platform, GenAI Agents, Data/Product Analytics, Automation), and quantifiable business impact.
 
 2. ATS KEYWORDS & SKILLS ALIGNMENT:
-- Extract 10-14 exact technical & functional skills directly from the JD that are genuinely backed by Kartik's profile.
-- Prioritize keywords like SQL, Power Automate, Power Apps, Copilot Studio, Power BI, Process Optimization, Stakeholder Management, A/B Testing, or ETL depending on the JD focus.
+- Extract 10-14 exact technical & functional skills directly from the JD backed by Kartik's profile.
 
 3. QUANTIFIED BULLETS:
-- Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven, highlighting the skills that map to the JD.
+- Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven.
 
 4. COVER LETTER:
-- This is where you actively reference {company} and {title}, explaining why Kartik is interested and how his past results solve their needs.
+- Actively reference {company} and {title}, explaining why Kartik is interested and how his results solve their needs.
 
 Return ONLY a valid JSON object matching this schema:
 {{
 "match_score": "e.g., 94%",
-"reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
+"reason": "1-2 sentences on why Kartik's exact tech stack and experience fit this role.",
 "skills_gap": "Any missing tool/skill or 'None'",
 "ats_keywords": ["10-14 exact matching technical/domain keywords"],
 "tailored_summary": "A 3-4 sentence dense executive summary highlighting Kartik's expertise in process automation, analytics, and GenAI agent development. Must NOT mention {company}.",
@@ -456,7 +413,7 @@ Return ONLY a valid JSON object matching this schema:
 """
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -472,10 +429,10 @@ Return ONLY a valid JSON object matching this schema:
                 "GenAI Agents", "SQL", "Process Automation", "Stakeholder Management",
                 "Change Management", "SharePoint Online", "Data Analytics", "RFP/RFI Management"
             ],
-            "tailored_summary": "Solutions-driven analyst with ~3.5+ years of experience across KPMG and GlobalLogic specializing in enterprise process automation, Microsoft Power Platform architectures, GenAI agent implementation, and data-driven operational optimization. Proven track record of architecting scalable workflows, automating legacy data pipelines, and saving over 2,000 hours annually across global cross-functional engagements.",
+            "tailored_summary": "Solutions-driven analyst with ~3.5+ years of experience across KPMG and GlobalLogic specializing in enterprise process automation, Microsoft Power Platform architectures, GenAI agent implementation, and data-driven operational optimization.",
             "kpmg_project_bullets": [
                 "Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.",
-                "Built end-to-end migration of Excel-based data collection for 45+ pillars to automated SPO lists, including 3 Power Automate flows for alerts, change management, and permission governance.",
+                "Built end-to-end migration of Excel-based data collection for 45+ pillars to automated SPO lists, including 3 Power Automate flows.",
                 "Built & managed VBA macro solutions refreshing 30,000+ assets globally, saving 485 hrs annually.",
                 "Architected a multi-modal Copilot agent for messy data cleanup, field drafting, and metadata tagging, saving 325 hrs annually.",
                 "Administered contact management system for 10,000+ members and uploaded 5,000+ content assets across 15 libraries."
@@ -484,7 +441,7 @@ Return ONLY a valid JSON object matching this schema:
                 "Saved 2,000+ hrs annually across Power Platform, Copilot Studio, and VBA Macros.",
                 "Handled 100+ RFP/RFI requests and maintained 100+ internal site pages per brand standards.",
                 "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
-                "Catered to 50+ SharePoint governance and administration requests including permission-level management."
+                "Catered to 50+ SharePoint governance and administration requests."
             ],
             "globallogic_bullets": [
                 "Created best practices and QA processes for a Google GenAI training dataset project for Android screen search.",
@@ -494,10 +451,10 @@ Return ONLY a valid JSON object matching this schema:
             ],
             "cover_letter_subject": f"Subject: Application for {title} - Kartik Bhatt",
             "cover_letter_paragraphs": [
-                f"I am excited to apply for the {title} position at {company}. With over 3.5 years of experience at KPMG and GlobalLogic, I specialize in process automation, Power Platform ecosystems, and Copilot AI agents, and I'm eager to bring that background to your team.",
-                "At KPMG, I built a complete Power Platform solution driving 20,000 reach outs annually across 13 sectors, architected a multi-modal Copilot agent that saved 325 hrs annually, and led migrations across 45+ pillars — saving over 2,000 hrs annually in total.",
-                "At GlobalLogic, I engineered QA frameworks for Google's GenAI training datasets, lifting onshore project delivery quality from 74% to 95% while QA'ing 500+ pieces weekly across 10+ projects.",
-                f"I would welcome the opportunity to bring this operational and technical expertise to {company} and help drive measurable, scalable outcomes for your team. Thank you for your time and consideration — I look forward to the possibility of discussing this further."
+                f"I am excited to apply for the {title} position at {company}. With over 3.5 years of experience at KPMG and GlobalLogic, I specialize in process automation, Power Platform ecosystems, and Copilot AI agents.",
+                "At KPMG, I built a complete Power Platform solution driving 20,000 reach outs annually across 13 sectors and architected an automated multi-modal Copilot agent.",
+                "At GlobalLogic, I engineered QA frameworks for Google's GenAI training datasets, lifting delivery quality from 74% to 95%.",
+                f"I would welcome the opportunity to bring this operational and technical expertise to {company}. Thank you for your time and consideration."
             ]
         }
 
@@ -596,10 +553,13 @@ def send_telegram_alert(title, company, location, tier, exp_detected, url, salar
     safe_company = company.replace("*", "").replace("_", " ")
     safe_location = location.replace("*", "").replace("_", " ")
 
+    # Identify whether source is direct portal or job board
+    source_tag = "🏢 Company Career Portal" if any(k in url for k in ["greenhouse", "lever.co", "workday", "ashby", "smartrecruiters", "amazon", "google", "microsoft"]) else "💼 Job Board (LinkedIn)"
+
     message_text = (
         f"🎯 *New Qualified Job Matched for Kartik!*\n\n"
         f"📌 *Role:* {safe_title}\n"
-        f"🏢 *Company:* {safe_company}\n"
+        f"🏢 *Company:* {safe_company} ({source_tag})\n"
         f"📍 *Location:* {safe_location} ({tier})\n"
         f"⏳ *Experience Required:* {exp_detected}\n"
         f"💰 *Salary Range:* {salary_range}\n"
@@ -632,7 +592,7 @@ def run():
 
     all_jobs = []
 
-    # 1. Scrape targeted job boards
+    # 1. Scrape standard job boards
     try:
         board_jobs = scrape_jobs(
             site_name=["linkedin", "indeed"],
@@ -648,9 +608,9 @@ def run():
     except Exception as e:
         print(f"[DEBUG] Scraper error: {e}")
 
-    # 2. Add ATS portal hits
+    # 2. Add Direct ATS & Company Portal Hits
     ats_jobs = search_enterprise_ats_jobs()
-    print(f"[DEBUG] Enterprise ATS search returned {len(ats_jobs)} raw listings.")
+    print(f"[DEBUG] Direct Enterprise ATS search returned {len(ats_jobs)} raw portal listings.")
     all_jobs.extend(ats_jobs)
 
     print(f"[DEBUG] Total raw candidates this run: {len(all_jobs)}")
@@ -703,19 +663,23 @@ def run():
             skip_counts["invalid_location"] += 1
             continue
 
-        # Salary Check
-        if not passes_salary_check(loc_tier, min_sal, max_sal):
+        # Salary Extraction / Estimation & Minimum Floor Verification
+        passes_sal, salary_range = get_salary_range_and_check(
+            title=title,
+            company=company,
+            location=location,
+            description=desc,
+            tier=loc_tier,
+            min_sal=min_sal,
+            max_sal=max_sal
+        )
+
+        if not passes_sal:
             skip_counts["salary_check"] += 1
+            print(f"[DEBUG] Rejected (Below Minimum Floor): '{title}' @ {company}")
             continue
 
         exp_str = f"{min_exp}+ Years" if min_exp else "2–5 Years / Unspecified"
-        salary_range = format_salary_range(min_sal, max_sal)
-
-        # Fallback: listing didn't disclose CTC — try to estimate it from AmbitionBox/Glassdoor
-        if salary_range == "Not Disclosed":
-            estimated_range = estimate_salary_from_web(title, company)
-            if estimated_range:
-                salary_range = estimated_range
 
         job_payload = {
             "title": title,
@@ -793,12 +757,13 @@ def run():
         )
 
         dispatched += 1
-        print(f"Dispatched text alert for: {qualified['title']} at {qualified['company']} ({qualified['tier']})")
+        print(f"Dispatched text alert for: {qualified['title']} at {qualified['company']} ({qualified['tier']}) [{qualified['salary_range']}]")
 
     print(
         f"\n[DEBUG] Run summary — Dispatched: {dispatched} | "
         f"Tier 1 matches: {len(tier_1_matches)} | Tier 2 matches: {len(tier_2_matches)} | "
         f"Skipped high exp: {skip_counts['exp_too_high']} | "
+        f"Skipped below salary floor: {skip_counts['salary_check']} | "
         f"Skipped non-target roles: {skip_counts['senior_or_irrelevant']} | "
         f"Skipped invalid location: {skip_counts['invalid_location']}"
     )
