@@ -27,7 +27,7 @@ The bot continuously scrapes listings across major job platforms and enterprise 
 
 * **Automated Telegram Alerts & Archival**:
 * Sends compact job cards with direct application links and direct raw PDF download links.
-* Auto-tracks seen jobs in `job_tracker.db` and logs full records into `job_applications.xlsx`.
+* Dedupes against previously seen jobs and logs every qualified match into `job_applications.xlsx` — the single source of truth for both tracking and dedupe, with columns: `Title`, `Company`, `Salary Range`, `Fit Score`, `Location`, `Resume Link`, `Cover Letter Link`, `Job Link`.
 
 
 
@@ -39,7 +39,7 @@ The bot continuously scrapes listings across major job platforms and enterprise 
 * **Scraping**: `python-jobspy`, `requests`, `SearchAPI` (Google Search Engine API)
 * **LLM Engine**: Google GenAI SDK (`gemini-2.5-flash` / `gemini-3.6-flash`)
 * **Document Generation**: ReportLab
-* **Storage & Persistence**: SQLite3, Pandas, OpenPyXL
+* **Storage & Persistence**: Pandas, OpenPyXL — a single `job_applications.xlsx` file (no database)
 * **CI/CD**: GitHub Actions
 
 ---
@@ -53,12 +53,13 @@ job-hunter/
 │       └── run_engine.yml    # GitHub Actions cron scheduler & auto-commit
 ├── generated_docs/           # Auto-generated resumes and cover letters (PDFs)
 ├── main.py                   # Master orchestration, filtering, and dispatch pipeline
-├── job_tracker.db            # SQLite database tracking seen job URLs
-├── job_applications.xlsx     # Application logs with match scores and metadata
+├── job_applications.xlsx     # Sole tracker/store: application logs, match scores, and dedupe log
 ├── requirements.txt          # Python dependencies
 └── README.md
 
 ```
+
+> **Note:** `job_tracker.db` (SQLite) has been retired. Dedupe checks and application logging both now run against `job_applications.xlsx` directly, so there's a single file to reason about instead of two that could drift out of sync. The earlier `config.py` and `job_screener.py` files — an unused, parallel copy of the screening logic — have also been removed; all filtering now lives inline in `main.py`.
 
 ---
 
@@ -123,4 +124,4 @@ python main.py
 
 ## 🔄 GitHub Actions Automation
 
-The engine is configured to run automatically on schedule via `.github/workflows/run_engine.yml`. It restores tracked cache databases, executes `main.py`, commits freshly generated PDFs to `generated_docs/`, and pushes them back to `main` with `[skip ci]`.
+The engine is configured to run automatically on schedule via `.github/workflows/run_engine.yml`. `job_applications.xlsx` is intentionally excluded from git tracking (see `.gitignore`) to avoid modify/delete and binary-merge conflicts on repeated runs — it's restored between runs via `actions/cache` instead. Each run executes `main.py`, commits freshly generated PDFs to `generated_docs/`, and pushes them back to `main` with `[skip ci]`.
