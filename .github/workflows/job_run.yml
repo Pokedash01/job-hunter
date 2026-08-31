@@ -85,6 +85,7 @@ jobs:
           fi
 
           git add -f "${pdf_files[@]}"
+          git add -f job_log.csv 2>/dev/null || true
 
           if git diff --staged --quiet; then
             echo "No new documents to commit."
