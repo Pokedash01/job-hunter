@@ -18,7 +18,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-SEARCH_KEY = os.environ.get("SEARCH_API_KEY")
+SEARCH_KEY = os.environ.get("SEARCH_API_KEYSEARCH_API_KEY")
 
 client = genai.Client(api_key=GEMINI_KEY)
 
