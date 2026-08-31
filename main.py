@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import sqlite3
 import requests
 import pandas as pd
 from datetime import datetime
@@ -28,36 +27,34 @@ KARTIK_PROFILE = """
 Candidate: Kartik Bhatt
 Contact: kb270102@gmail.com | +91-7428062532 | Portfolio: https://kartikb.vercel.app/
 Education: Bachelor of Computer Applications, Majors: Computer Science, Maharaja Surajmal Institute | GPA: 9.3/10 (Top 1%) | Jul 2019 - Aug 2022
-
 Experience Summary: ~3.5+ years of cross-functional experience across KPMG and GlobalLogic driving process automation, Copilot/GenAI agents, Power Platform solutions, and operational excellence.
 
 Work Experience:
 1. KPMG | Analyst | Knowledge Management | Gurugram (May 2024 - Present)
-   Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management and played a key role in business development.
+Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management and played a key role in business development.
+Key Projects:
+- Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.
+- Built end-to-end solution to facilitate migration of old Excel-based data collection for 45+ pillars to automated SPO list integration, including 3 Power Automate flows for alerts, change management, data migration, and permission governance.
+- Built & managed multiple VBA macro solutions refreshing a repository of 30,000+ assets globally, including change management, saving 485 hrs annually.
+- Architected a multi-modal Copilot agent to assist with messy data, draft fields, and apply metadata tags based on source and guidelines, saving 325 hrs annually.
 
-   Key Projects:
-   - Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.
-   - Built end-to-end solution to facilitate migration of old Excel-based data collection for 45+ pillars to automated SPO list integration, including 3 Power Automate flows for alerts, change management, data migration, and permission governance.
-   - Built & managed multiple VBA macro solutions refreshing a repository of 30,000+ assets globally, including change management, saving 485 hrs annually.
-   - Architected a multi-modal Copilot agent to assist with messy data, draft fields, and apply metadata tags based on source and guidelines, saving 325 hrs annually.
+Business Development & Operations:
+- Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.
+- Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages per brand values and standards.
+- Undertook complete contact management system administration for 10,000+ KGS members.
+- Uploaded 5,000+ content assets across 3 content types and 15 libraries.
+- Performed Audit Market Share (AMS) analysis for 6+ sectors.
+- Catered to 50+ SharePoint governance and administration requests, including term store management, change management, metadata management, and permission-level management.
 
-   Business Development & Operations:
-   - Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.
-   - Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages per brand values and standards.
-   - Undertook complete contact management system administration for 10,000+ KGS members.
-   - Uploaded 5,000+ content assets across 3 content types and 15 libraries.
-   - Performed Audit Market Share (AMS) analysis for 6+ sectors.
-   - Catered to 50+ SharePoint governance and administration requests, including term store management, change management, metadata management, and permission-level management.
-
-   Awards: KUDOS (efficiency & Lean Six Sigma, saving 2,000+ hrs annually), KUDOS (migrating legacy VBA/Excel practices to GenAI-focused agent + Power Platform workflows), Super Team Award (hosting/organizing employee council events), Ally of Inclusion, Gurus@Work (contributions to learning culture).
+Awards: KUDOS (efficiency & Lean Six Sigma, saving 2,000+ hrs annually), KUDOS (migrating legacy VBA/Excel practices to GenAI-focused agent + Power Platform workflows), Super Team Award (hosting/organizing employee council events), Ally of Inclusion, Gurus@Work (contributions to learning culture).
 
 2. GlobalLogic Technologies Private Limited | Associate Analyst | Content Engineering | Gurugram (Sep 2022 - Oct 2023)
-   Took part in content generation and manipulation projects for clients including Google.
-   - Created best practices, process docs, and QA processes for a Google project to build test & training datasets for GenAI screen search on Android.
-   - Piloted a project to extract relevant answers from multi-level docs to build a training dataset for AI.
-   - Designed and implemented QA processes for data entry, reducing errors by 25% and improving data accuracy.
-   - Managed process documentation for 10+ projects, ensuring compliance and accessibility for stakeholders.
-   - Improved onshore project delivery quality from 74% to 95%; QA'd 500+ pieces weekly and led 3 pilot projects, securing all of them against competition from major MNCs.
+Took part in content generation and manipulation projects for clients including Google.
+- Created best practices, process docs, and QA processes for a Google project to build test & training datasets for GenAI screen search on Android.
+- Piloted a project to extract relevant answers from multi-level docs to build a training dataset for AI.
+- Designed and implemented QA processes for data entry, reducing errors by 25% and improving data accuracy.
+- Managed process documentation for 10+ projects, ensuring compliance and accessibility for stakeholders.
+- Improved onshore project delivery quality from 74% to 95%; QA'd 500+ pieces weekly and led 3 pilot projects, securing all of them against competition from major MNCs.
 
 Skills: Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL, MySQL, Process Automation, Stakeholder Management, Product/Data Analytics, RFP/RFI Management, Change Management, Digital Transformation.
 Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Microsoft Certified: AI Transformation Leader (AB-731), Microsoft Certified: AI Business Professional (AB-730), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate.
@@ -70,7 +67,6 @@ SENIORITY_BLACKLIST = [
     r"\bengineering manager\b", r"\bgeneral manager\b", r"\blead architect\b",
     r"\bassociate director\b", r"\bavp\b", r"\boperations director\b"
 ]
-
 ROLES_WHITELIST = [
     r"\bdata analyst\b", r"\bbusiness analyst\b", r"\bproduct analyst\b",
     r"\bassociate product manager\b", r"\bapm\b", r"\bcopilot studio\b",
@@ -78,16 +74,13 @@ ROLES_WHITELIST = [
     r"\bprocess automation\b", r"\banalytics engineer\b", r"\boperations analyst\b",
     r"\bproduct operations\b"
 ]
-
 EXCLUDED_DOMAINS = [
-    "hr", "human resources", "talent acquisition", "recruiter", "recruitment", 
-    "sales", "business development executive", "bde", "marketing", "digital marketing", 
+    "hr", "human resources", "talent acquisition", "recruiter", "recruitment",
+    "sales", "business development executive", "bde", "marketing", "digital marketing",
     "telecaller", "content writer", "seo", "graphic designer", "accountant"
 ]
-
 LOCATIONS_TIER_1 = [r"\bdelhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b", r"\bnoida\b", r"\bfaridabad\b", r"\bremote\b", r"\bwfh\b", r"\bwork from home\b"]
 LOCATIONS_TIER_2 = [r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b"]
-
 MAX_EXPERIENCE_CAP = 5.5
 
 EXCEL_FILE = "job_applications.xlsx"
@@ -97,73 +90,81 @@ os.makedirs(DOCS_DIR, exist_ok=True)
 GITHUB_REPO = "Pokedash01/job-hunter"
 GITHUB_BRANCH = "main"
 
+# Column order used across the entire xlsx tracker/store. This single file
+# replaces job_tracker.db entirely -- it is both the dedupe log and the
+# human-readable application tracker.
+EXCEL_COLUMNS = [
+    "Title", "Company", "Salary Range", "Fit Score",
+    "Location", "Resume Link", "Cover Letter Link", "Job Link"
+]
+
+
 def github_raw_link(local_path: str) -> str:
     """Builds a raw.githubusercontent.com direct-download link for a file in this repo."""
     clean_path = local_path.replace(os.sep, "/").lstrip("./")
     return f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{clean_path}"
 
-# ----------------- STORAGE ENGINE -----------------
-def init_tracker():
-    conn = sqlite3.connect("job_tracker.db")
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS seen_jobs (
-            url TEXT PRIMARY KEY,
-            title TEXT,
-            company TEXT,
-            found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
 
+# ----------------- STORAGE ENGINE (xlsx only, no sqlite) -----------------
+def init_tracker():
+    """Creates job_applications.xlsx with the required headers if it doesn't exist yet.
+    There is no longer any sqlite database -- the xlsx file itself is the single
+    source of truth for both the human tracker and the 'have I seen this job' check.
+    """
     if not os.path.exists(EXCEL_FILE):
-        df = pd.DataFrame(columns=[
-            "Date Found", "Role Title", "Company", "Location", 
-            "Location Tier", "Estimated CTC", "Match Score", "Application Link", 
-            "Status", "Resume File Name", "Cover Letter File Name"
-        ])
+        df = pd.DataFrame(columns=EXCEL_COLUMNS)
         df.to_excel(EXCEL_FILE, index=False)
 
-def is_seen(url):
-    conn = sqlite3.connect("job_tracker.db")
-    c = conn.cursor()
-    c.execute("SELECT url FROM seen_jobs WHERE url = ?", (url,))
-    seen = c.fetchone() is not None
-    conn.close()
-    return seen
 
-def log_job(url, title, company, location, tier, ctc, score, resume_filename, cl_filename):
-    conn = sqlite3.connect("job_tracker.db")
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO seen_jobs (url, title, company) VALUES (?, ?, ?)", (url, title, company))
-    conn.commit()
-    conn.close()
-
+def _load_tracker() -> pd.DataFrame:
+    if not os.path.exists(EXCEL_FILE):
+        return pd.DataFrame(columns=EXCEL_COLUMNS)
     try:
         df = pd.read_excel(EXCEL_FILE)
+        # Guard against a legacy/partial file missing expected columns
+        for col in EXCEL_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
+        return df
+    except Exception as e:
+        print(f"Excel read error: {e}")
+        return pd.DataFrame(columns=EXCEL_COLUMNS)
+
+
+def is_seen(url: str) -> bool:
+    """Dedupe check against the 'Job Link' column of the xlsx tracker."""
+    df = _load_tracker()
+    if df.empty:
+        return False
+    return df["Job Link"].astype(str).eq(str(url)).any()
+
+
+def log_job(title, company, salary_range, fit_score, location, resume_link, cover_letter_link, job_link):
+    """Appends one row to job_applications.xlsx. This is the only persistence
+    step in the pipeline now -- sqlite3/job_tracker.db has been removed."""
+    try:
+        df = _load_tracker()
         new_row = {
-            "Date Found": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "Role Title": title,
+            "Title": title,
             "Company": company,
+            "Salary Range": salary_range,
+            "Fit Score": fit_score,
             "Location": location,
-            "Location Tier": tier,
-            "Estimated CTC": ctc,
-            "Match Score": score,
-            "Application Link": url,
-            "Status": "PDFs Attached in Telegram / Saved in Repo",
-            "Resume File Name": resume_filename,
-            "Cover Letter File Name": cl_filename
+            "Resume Link": resume_link,
+            "Cover Letter Link": cover_letter_link,
+            "Job Link": job_link
         }
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)[EXCEL_COLUMNS]
         df.to_excel(EXCEL_FILE, index=False)
     except Exception as e:
         print(f"Excel logging error: {e}")
+
 
 # ----------------- SMART SCREENER & FILTERS -----------------
 def is_seniority_excluded(title: str) -> bool:
     t = title.lower()
     return any(re.search(pat, t) for pat in SENIORITY_BLACKLIST)
+
 
 def is_role_relevant(title: str) -> bool:
     t = title.lower()
@@ -173,6 +174,7 @@ def is_role_relevant(title: str) -> bool:
     if is_seniority_excluded(title):
         return False
     return any(re.search(good, t) for good in ROLES_WHITELIST)
+
 
 def extract_min_experience(text: str):
     patterns = [
@@ -185,6 +187,7 @@ def extract_min_experience(text: str):
             years.append(int(m.group(1)))
     return min(years) if years else None
 
+
 def classify_location(location_str: str):
     loc = str(location_str).lower()
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_1):
@@ -193,11 +196,26 @@ def classify_location(location_str: str):
         return True, "Tier 2 (Bangalore / Hyderabad / Pune)"
     return False, "Out of Scope Location"
 
+
 def passes_salary_check(location_tier: str, min_sal, max_sal):
     min_required = 1000000 if "Tier 1" in location_tier else 1500000
     if max_sal and max_sal > 0:
         return max_sal >= min_required
     return True
+
+
+def format_salary_range(min_sal, max_sal) -> str:
+    """Builds a human-readable salary range string for the xlsx tracker."""
+    has_min = min_sal and float(min_sal) > 0
+    has_max = max_sal and float(max_sal) > 0
+    if has_min and has_max:
+        return f"₹{int(min_sal):,} - ₹{int(max_sal):,}"
+    if has_max:
+        return f"Up to ₹{int(max_sal):,}"
+    if has_min:
+        return f"₹{int(min_sal):,}+"
+    return "Not Disclosed"
+
 
 # ----------------- ENTERPRISE ATS SEARCH -----------------
 def search_enterprise_ats_jobs():
@@ -227,7 +245,6 @@ def search_enterprise_ats_jobs():
                 link = item.get("link", "")
                 title = item.get("title", "Role Opening")
                 snippet = item.get("snippet", "")
-                
                 if link and is_role_relevant(title):
                     discovered.append({
                         "title": title,
@@ -240,74 +257,74 @@ def search_enterprise_ats_jobs():
                     })
         except Exception as e:
             print(f"ATS search error for query {query}: {e}")
-            
     return discovered
+
 
 # ----------------- GEMINI ASSET GENERATION -----------------
 def generate_application_kit(title, company, description):
     prompt = f"""
-    You are an expert executive resume writer, ATS optimization specialist, and career strategist
-    tailoring application documents for Kartik Bhatt (~3.5 years of experience).
+You are an expert executive resume writer, ATS optimization specialist, and career strategist
+tailoring application documents for Kartik Bhatt (~3.5 years of experience).
 
-    Candidate Profile (ground truth — never fabricate skills or employment):
-    {KARTIK_PROFILE}
+Candidate Profile (ground truth — never fabricate skills or employment):
+{KARTIK_PROFILE}
 
-    Target Job Opening:
-    Title: {title}
-    Company: {company}
-    JD Snippet: {description[:2200]}
+Target Job Opening:
+Title: {title}
+Company: {company}
+JD Snippet: {description[:2200]}
 
-    CRITICAL RULES FOR RESUME VS COVER LETTER:
-    1. RESUME PROFESSIONAL SUMMARY RULES:
-       - DO NOT mention "{company}" or "seeking to work at {company}" anywhere in the tailored_summary.
-       - The summary represents Kartik's personal executive profile. Frame it around his 3.5+ years of experience, core domains (Power Platform, GenAI Agents, Data/Product Analytics, Automation), and quantifiable business impact.
-       - Align phrasing to the domain of {title} without sounding like a job application objective.
+CRITICAL RULES FOR RESUME VS COVER LETTER:
+1. RESUME PROFESSIONAL SUMMARY RULES:
+- DO NOT mention "{company}" or "seeking to work at {company}" anywhere in the tailored_summary.
+- The summary represents Kartik's personal executive profile. Frame it around his 3.5+ years of experience, core domains (Power Platform, GenAI Agents, Data/Product Analytics, Automation), and quantifiable business impact.
+- Align phrasing to the domain of {title} without sounding like a job application objective.
 
-    2. ATS KEYWORDS & SKILLS ALIGNMENT:
-       - Extract 10-14 exact technical & functional skills directly from the JD that are genuinely backed by Kartik's profile.
-       - Prioritize keywords like SQL, Power Automate, Power Apps, Copilot Studio, Power BI, Process Optimization, Stakeholder Management, A/B Testing, or ETL depending on the JD focus.
+2. ATS KEYWORDS & SKILLS ALIGNMENT:
+- Extract 10-14 exact technical & functional skills directly from the JD that are genuinely backed by Kartik's profile.
+- Prioritize keywords like SQL, Power Automate, Power Apps, Copilot Studio, Power BI, Process Optimization, Stakeholder Management, A/B Testing, or ETL depending on the JD focus.
 
-    3. QUANTIFIED BULLETS:
-       - Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven, highlighting the skills that map to the JD.
+3. QUANTIFIED BULLETS:
+- Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven, highlighting the skills that map to the JD.
 
-    4. COVER LETTER:
-       - This is where you actively reference {company} and {title}, explaining why Kartik is interested and how his past results solve their needs.
+4. COVER LETTER:
+- This is where you actively reference {company} and {title}, explaining why Kartik is interested and how his past results solve their needs.
 
-    Return ONLY a valid JSON object matching this schema:
-    {{
-        "match_score": "e.g., 94%",
-        "reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
-        "skills_gap": "Any missing tool/skill or 'None'",
-        "ats_keywords": ["10-14 exact matching technical/domain keywords"],
-        "tailored_summary": "A 3-4 sentence dense executive summary highlighting Kartik's expertise in process automation, analytics, and GenAI agent development. Must NOT mention {company}.",
-        "kpmg_project_bullets": [
-            "Quantified bullet on Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved",
-            "Quantified bullet on SPO migration: 45+ pillars, 3 Power Automate flows, change management",
-            "Quantified bullet on VBA macro repository: 30,000+ assets, 485 hrs saved",
-            "Quantified bullet on multi-modal Copilot agent: messy data cleanup, field drafting, metadata tagging, 325 hrs saved",
-            "Quantified bullet on contact management administration for 10,000+ members and 5,000+ assets"
-        ],
-        "kpmg_bd_bullets": [
-            "Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.",
-            "Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages aligned with brand guidelines.",
-            "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
-            "Catered to 50+ SharePoint governance and administration requests."
-        ],
-        "globallogic_bullets": [
-            "Designed best practices, process docs, and QA workflows for Google GenAI Android search datasets.",
-            "Designed and implemented QA processes for data entry, reducing errors by 25%.",
-            "Managed process documentation across 10+ engagements, lifting delivery quality from 74% to 95%.",
-            "QA'd 500+ pieces weekly and led 3 pilot projects to completion against major MNC competition."
-        ],
-        "cover_letter_subject": "Subject: Driving Operational Excellence & Scalable Solutions as {title}",
-        "cover_letter_paragraphs": [
-            "Opening paragraph: enthusiasm for {title} at {company}, JD hook, and 1-line summary of 3.5+ year background.",
-            "Second paragraph: 2-3 concrete KPMG achievements mapped directly to the JD requirements.",
-            "Third paragraph: GlobalLogic experience mapped to relevant JD requirements.",
-            "Closing paragraph: connecting skills to {company}'s goals, restating enthusiasm, thanking reader, inviting next steps."
-        ]
-    }}
-    """
+Return ONLY a valid JSON object matching this schema:
+{{
+"match_score": "e.g., 94%",
+"reason": "1-2 sentences on why Kartik's exact tech stack and KPMG/GlobalLogic experience fit this role.",
+"skills_gap": "Any missing tool/skill or 'None'",
+"ats_keywords": ["10-14 exact matching technical/domain keywords"],
+"tailored_summary": "A 3-4 sentence dense executive summary highlighting Kartik's expertise in process automation, analytics, and GenAI agent development. Must NOT mention {company}.",
+"kpmg_project_bullets": [
+    "Quantified bullet on Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved",
+    "Quantified bullet on SPO migration: 45+ pillars, 3 Power Automate flows, change management",
+    "Quantified bullet on VBA macro repository: 30,000+ assets, 485 hrs saved",
+    "Quantified bullet on multi-modal Copilot agent: messy data cleanup, field drafting, metadata tagging, 325 hrs saved",
+    "Quantified bullet on contact management administration for 10,000+ members and 5,000+ assets"
+],
+"kpmg_bd_bullets": [
+    "Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.",
+    "Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages aligned with brand guidelines.",
+    "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
+    "Catered to 50+ SharePoint governance and administration requests."
+],
+"globallogic_bullets": [
+    "Designed best practices, process docs, and QA workflows for Google GenAI Android search datasets.",
+    "Designed and implemented QA processes for data entry, reducing errors by 25%.",
+    "Managed process documentation across 10+ engagements, lifting delivery quality from 74% to 95%.",
+    "QA'd 500+ pieces weekly and led 3 pilot projects to completion against major MNC competition."
+],
+"cover_letter_subject": "Subject: Driving Operational Excellence & Scalable Solutions as {title}",
+"cover_letter_paragraphs": [
+    "Opening paragraph: enthusiasm for {title} at {company}, JD hook, and 1-line summary of 3.5+ year background.",
+    "Second paragraph: 2-3 concrete KPMG achievements mapped directly to the JD requirements.",
+    "Third paragraph: GlobalLogic experience mapped to relevant JD requirements.",
+    "Closing paragraph: connecting skills to {company}'s goals, restating enthusiasm, thanking reader, inviting next steps."
+]
+}}
+"""
     try:
         response = client.models.generate_content(
             model='gemini-3.6-flash',
@@ -355,6 +372,7 @@ def generate_application_kit(title, company, description):
             ]
         }
 
+
 # ----------------- DENSE PDF BUILDERS -----------------
 def create_dense_resume(filepath, kit):
     doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=25, bottomMargin=25)
@@ -391,15 +409,12 @@ def create_dense_resume(filepath, kit):
     story.append(Paragraph("<b>WORK EXPERIENCE</b>", section_style))
     story.append(Paragraph("<b>KPMG</b> | Analyst — Knowledge Management | Gurugram <i>(May 2024 – Present | ~3.5+ yrs total exp)</i>", company_style))
     story.append(Paragraph("<i>Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management & business development.</i>", body_style))
-    
     story.append(Paragraph("Key Projects", subhead_style))
     for b in kit.get("kpmg_project_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
-    
     story.append(Paragraph("Business Development & Operations", subhead_style))
     for b in kit.get("kpmg_bd_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
-    
     story.append(Paragraph("Key Achievements: Awarded 'KUDOS' twice — for Lean Six Sigma efficiency (2,000+ hrs saved) and for migrating legacy VBA/Excel practices to GenAI agents & Power Platform — plus 'Super Team', 'Ally of Inclusion', and 'Gurus@Work'.", bullet_style))
     story.append(Spacer(1, 3))
 
@@ -414,6 +429,7 @@ def create_dense_resume(filepath, kit):
     story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Microsoft Certified: AI Transformation Leader (AB-731) | Microsoft Certified: AI Business Professional (AB-730) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Certified Foundations Associate", body_style))
 
     doc.build(story)
+
 
 def create_dense_cover_letter(filepath, title, company, kit):
     doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=45, rightMargin=45, topMargin=40, bottomMargin=40)
@@ -437,23 +453,19 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
     story.append(Paragraph(f"<b>{kit.get('cover_letter_subject', 'Subject: Application for ' + title)}</b>", subj_style))
     story.append(Paragraph("Dear Hiring Manager,", body_style))
-
     for p in kit.get("cover_letter_paragraphs", []):
         story.append(Paragraph(p, body_style))
-
     story.append(Spacer(1, 8))
     story.append(Paragraph("Sincerely,<br/><b>Kartik Bhatt</b>", body_style))
 
     doc.build(story)
 
+
 # ----------------- TELEGRAM DISPATCHER -----------------
-def send_telegram_alert(title, company, location, tier, exp_detected, url, ctc_label, kit, resume_path, cl_path):
+def send_telegram_alert(title, company, location, tier, exp_detected, url, salary_range, kit, resume_link, cl_link):
     safe_title = title.replace("*", "").replace("_", " ")
     safe_company = company.replace("*", "").replace("_", " ")
     safe_location = location.replace("*", "").replace("_", " ")
-
-    resume_link = github_raw_link(resume_path)
-    cl_link = github_raw_link(cl_path)
 
     message_text = (
         f"🎯 *New Qualified Job Matched for Kartik!*\n\n"
@@ -461,7 +473,7 @@ def send_telegram_alert(title, company, location, tier, exp_detected, url, ctc_l
         f"🏢 *Company:* {safe_company}\n"
         f"📍 *Location:* {safe_location} ({tier})\n"
         f"⏳ *Experience Required:* {exp_detected}\n"
-        f"💰 *CTC Check:* {ctc_label}\n"
+        f"💰 *Salary Range:* {salary_range}\n"
         f"📊 *Fit Score:* {kit.get('match_score')}\n"
         f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
         f"🔗 [Apply Directly on Portal]({url})\n"
@@ -471,7 +483,6 @@ def send_telegram_alert(title, company, location, tier, exp_detected, url, ctc_l
     )
 
     endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-
     try:
         data = {
             "chat_id": CHAT_ID,
@@ -485,9 +496,11 @@ def send_telegram_alert(title, company, location, tier, exp_detected, url, ctc_l
     except Exception as e:
         print(f"Telegram dispatch error: {e}")
 
+
 # ----------------- MAIN PIPELINE -----------------
 def run():
     init_tracker()
+
     all_jobs = []
 
     # 1. Scrape targeted job boards
@@ -521,7 +534,7 @@ def run():
         "invalid_location": 0,
         "salary_check": 0
     }
-    
+
     tier_1_matches = []
     tier_2_matches = []
 
@@ -567,7 +580,7 @@ def run():
             continue
 
         exp_str = f"{min_exp}+ Years" if min_exp else "2–5 Years / Unspecified"
-        ctc_label = f"₹{int(max_sal):,}" if (max_sal and max_sal > 0) else "Meets/Exceeds Location Threshold"
+        salary_range = format_salary_range(min_sal, max_sal)
 
         job_payload = {
             "title": title,
@@ -576,7 +589,7 @@ def run():
             "tier": loc_tier,
             "exp_detected": exp_str,
             "url": url,
-            "ctc_label": ctc_label,
+            "salary_range": salary_range,
             "desc": desc
         }
 
@@ -600,12 +613,14 @@ def run():
 
         resume_filename = f"Resume_{safe_company}_{safe_title}_{timestamp}.pdf"
         cl_filename = f"CoverLetter_{safe_company}_{safe_title}_{timestamp}.pdf"
-
         resume_path = os.path.join(DOCS_DIR, resume_filename)
         cl_path = os.path.join(DOCS_DIR, cl_filename)
 
         create_dense_resume(resume_path, kit)
         create_dense_cover_letter(cl_path, qualified["title"], qualified["company"], kit)
+
+        resume_link = github_raw_link(resume_path)
+        cl_link = github_raw_link(cl_path)
 
         send_telegram_alert(
             title=qualified["title"],
@@ -614,23 +629,23 @@ def run():
             tier=qualified["tier"],
             exp_detected=qualified["exp_detected"],
             url=qualified["url"],
-            ctc_label=qualified["ctc_label"],
+            salary_range=qualified["salary_range"],
             kit=kit,
-            resume_path=resume_path,
-            cl_path=cl_path
+            resume_link=resume_link,
+            cl_link=cl_link
         )
 
         log_job(
-            url=qualified["url"],
             title=qualified["title"],
             company=qualified["company"],
-            location=qualified["location"],
-            tier=qualified["tier"],
-            ctc=qualified["ctc_label"],
-            score=kit.get("match_score"),
-            resume_filename=resume_filename,
-            cl_filename=cl_filename
+            salary_range=qualified["salary_range"],
+            fit_score=kit.get("match_score"),
+            location=f'{qualified["location"]} ({qualified["tier"]})',
+            resume_link=resume_link,
+            cover_letter_link=cl_link,
+            job_link=qualified["url"]
         )
+
         dispatched += 1
         print(f"Dispatched text alert for: {qualified['title']} at {qualified['company']} ({qualified['tier']})")
 
@@ -641,6 +656,7 @@ def run():
         f"Skipped non-target roles: {skip_counts['senior_or_irrelevant']} | "
         f"Skipped invalid location: {skip_counts['invalid_location']}"
     )
+
 
 if __name__ == "__main__":
     run()
