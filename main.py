@@ -58,31 +58,43 @@ Took part in content generation and manipulation projects for clients including 
 - Managed process documentation for 10+ projects, ensuring compliance and accessibility for stakeholders.
 - Improved onshore project delivery quality from 74% to 95%; QA'd 500+ pieces weekly and led 3 pilot projects, securing all of them against competition from major MNCs.
 
-Skills: Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL, MySQL, Process Automation, Stakeholder Management, Product/Data Analytics, RFP/RFI Management, Change Management, Digital Transformation.
+Skills: Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL, MySQL, Python, Process Automation, Stakeholder Management, Product/Data Analytics, RFP/RFI Management, Change Management, Digital Transformation.
 Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Microsoft Certified: AI Transformation Leader (AB-731), Microsoft Certified: AI Business Professional (AB-730), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate.
 """
 
-# ----------------- FILTERING CONSTANTS -----------------
+# ----------------- STRICT SKILL-BASED FILTERING -----------------
 SENIORITY_BLACKLIST = [
     r"\bsenior manager\b", r"\bprincipal\b", r"\bdirector\b", r"\bvp\b",
     r"\bhead of\b", r"\bgroup product manager\b", r"\btech lead\b",
     r"\bengineering manager\b", r"\bgeneral manager\b", r"\blead architect\b",
-    r"\bassociate director\b", r"\bavp\b", r"\boperations director\b"
+    r"\bassociate director\b", r"\bavp\b", r"\boperations director\b", r"\bstaff\b"
 ]
+
 ROLES_WHITELIST = [
     r"\bdata analyst\b", r"\bbusiness analyst\b", r"\bproduct analyst\b",
     r"\bassociate product manager\b", r"\bapm\b", r"\bcopilot studio\b",
     r"\bpower automate\b", r"\bpower platform\b", r"\bbi developer\b",
     r"\bprocess automation\b", r"\banalytics engineer\b", r"\boperations analyst\b",
-    r"\bproduct operations\b"
+    r"\bproduct operations\b", r"\bai analyst\b", r"\bautomation analyst\b"
 ]
+
+# Essential skill keywords: JD must match at least 2 of these to qualify
+CORE_SKILLS_KEYWORDS = [
+    r"\bpower automate\b", r"\bpower platform\b", r"\bpower apps\b", r"\bpower bi\b",
+    r"\bcopilot\b", r"\bgenai\b", r"\bllm\b", r"\bsharepoint\b", r"\bvba\b",
+    r"\bprocess automation\b", r"\bsql\b", r"\bpython\b", r"\brpa\b", r"\bworkflows?\b",
+    r"\bdata analytics\b", r"\bbusiness intelligence\b", r"\bdecision support\b"
+]
+
 EXCLUDED_DOMAINS = [
     "hr", "human resources", "talent acquisition", "recruiter", "recruitment",
     "sales", "business development executive", "bde", "marketing", "digital marketing",
-    "telecaller", "content writer", "seo", "graphic designer", "accountant"
+    "telecaller", "content writer", "seo", "graphic designer", "accountant",
+    "surveyor", "field data", "manufacturing operating", "master data management"
 ]
-LOCATIONS_TIER_1 = [r"\bdelhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b", r"\bnoida\b", r"\bfaridabad\b", r"\bremote\b", r"\bwfh\b", r"\bwork from home\b"]
-LOCATIONS_TIER_2 = [r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b"]
+
+LOCATIONS_TIER_1 = [r"\bdelhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b", r"\bnoida\b", r"\bfaridabad\b", r"\bremote\b", r"\bwfh\b", r"\bwork from home\b", r"\bindia\b"]
+LOCATIONS_TIER_2 = [r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b", r"\bmumbai\b"]
 MAX_EXPERIENCE_CAP = 5.5
 
 EXCEL_FILE = "job_applications.xlsx"
@@ -173,14 +185,27 @@ def is_seniority_excluded(title: str) -> bool:
     return any(re.search(pat, t) for pat in SENIORITY_BLACKLIST)
 
 
-def is_role_relevant(title: str) -> bool:
+def is_role_and_skill_relevant(title: str, description: str) -> bool:
     t = title.lower()
+    d = description.lower()
+    full_text = f"{t} {d}"
+
+    # 1. Exclude forbidden domain terms
     for bad in EXCLUDED_DOMAINS:
         if re.search(r'\b' + re.escape(bad) + r'\b', t):
             return False
+
+    # 2. Exclude Senior / Staff / Director roles
     if is_seniority_excluded(title):
         return False
-    return any(re.search(good, t) for good in ROLES_WHITELIST)
+
+    # 3. Must match a target role title
+    if not any(re.search(good, t) for good in ROLES_WHITELIST):
+        return False
+
+    # 4. Check core technical alignment: Require at least 2 skill keywords in text
+    matched_skills = sum(1 for kw in CORE_SKILLS_KEYWORDS if re.search(kw, full_text))
+    return matched_skills >= 2
 
 
 def extract_min_experience(text: str):
@@ -201,66 +226,64 @@ def classify_location(location_str: str):
         return True, "Tier 1 (Delhi-NCR / Remote)"
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_2):
         return True, "Tier 2 (Bangalore / Hyderabad / Pune)"
-    return False, "Out of Scope Location"
+    return True, "Tier 1 (Delhi-NCR / Remote)"  # Default India roles to Tier 1
 
 
-# ----------------- LLM SALARY ESTIMATION & FLOOR CHECK -----------------
+# ----------------- GEMINI 3.6 FLASH COMPENSATION ANALYZER -----------------
 def get_salary_range_and_check(title: str, company: str, location: str, description: str, tier: str, min_sal=None, max_sal=None):
-    min_floor = 1000000 if "Tier 1" in tier else 1500000
+    min_floor = 1000000 if "Tier 1" in tier else 1400000
 
+    # 1. Directly parsed salary from scraper
     if max_sal and float(max_sal) > 0:
-        actual_min = float(min_sal) if min_sal and float(min_sal) > 0 else float(max_sal) * 0.75
+        actual_min = float(min_sal) if min_sal and float(min_sal) > 0 else float(max_sal) * 0.8
         actual_max = float(max_sal)
         if actual_max < min_floor:
             return False, ""
         return True, f"₹{actual_min/100000:.1f} - ₹{actual_max/100000:.1f} LPA"
 
+    # 2. Dynamic evaluation via Gemini 3.6 Flash
     prompt = f"""
-You are an expert Indian tech compensation analyst.
-Analyze the following role for Kartik Bhatt (~3.5 YOE, Power Platform, Analytics, GenAI Agents):
+You are an expert Indian tech industry compensation analyst.
+Analyze the expected total annual CTC (in INR / LPA) for this role given Kartik Bhatt's profile (~3.5 years of experience at KPMG & GlobalLogic, BCA CS 9.3 GPA, Power Platform, Copilot Studio, Analytics, SQL, Python):
 
 Job Title: {title}
 Company: {company}
 Location: {location} ({tier})
-Job Description Snippet: {description[:2000]}
+Job Description: {description[:2500]}
 
-Task:
-1. Extract any explicitly mentioned salary.
-2. If NO salary is disclosed, estimate the realistic 25th-75th percentile market base CTC in INR for a 3-4 YOE candidate in India for this company/role.
+Rules:
+1. If the job description lists compensation, extract it directly.
+2. Otherwise, estimate a realistic, dynamic CTC range based on the company tier (e.g. MNC, Tier 1 Product, Consulting, Fast-growing Startup), candidate's ~3.5 YOE, and specific role complexity. Do NOT output a generic placeholder range like 12-16 LPA unless that is genuinely accurate for this company and level.
 3. Determine `passes_floor`: true if max_inr >= {min_floor}, false otherwise.
 
 Return ONLY a valid JSON object matching this schema:
 {{
-  "min_inr": 1200000,
-  "max_inr": 1600000,
-  "display_range": "₹12 - ₹16 LPA (Est.)",
+  "min_inr": 1300000,
+  "max_inr": 1850000,
+  "display_range": "₹13 - ₹18.5 LPA (Est.)",
   "passes_floor": true
 }}
 """
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
         data = json.loads(response.text)
         if not data.get("passes_floor", True):
             return False, ""
-        return True, data.get("display_range", f"₹{min_floor/100000:.0f}+ LPA (Est.)")
+        return True, data.get("display_range", "₹12 - ₹16 LPA (Est.)")
     except Exception as e:
         print(f"Salary check error for {title} @ {company}: {e}")
-        fallback_lpa = 12 if "Tier 1" in tier else 16
-        return True, f"₹{fallback_lpa} - ₹{fallback_lpa+4} LPA (Est.)"
+        return True, "₹11 - ₹15 LPA (Est.)"
 
 
 # ----------------- DIRECT ATS & COMPANY PORTAL SEARCH -----------------
 def extract_company_from_url(url: str) -> str:
-    """Extracts a clean company name from direct career portal URLs."""
     try:
         domain = urlparse(url).netloc.lower()
         path = urlparse(url).path.lower()
-        
-        # e.g., company.greenhouse.io or company.wd3.myworkdayjobs.com
         parts = domain.split(".")
         if "greenhouse.io" in domain or "lever.co" in domain or "ashbyhq.com" in domain or "smartrecruiters.com" in domain:
             if parts[0] not in ["boards", "job-boards", "jobs", "www"]:
@@ -275,37 +298,30 @@ def extract_company_from_url(url: str) -> str:
 
 
 def fetch_portal_description(url: str) -> str:
-    """Extracts raw text content from direct ATS job pages."""
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        res = requests.get(url, headers=headers, timeout=8)
+        res = requests.get(url, headers=headers, timeout=6)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             for tag in soup(["script", "style", "nav", "footer", "header"]):
                 tag.decompose()
-            text = ' '.join(soup.stripped_strings)
-            return text[:4000]
-    except Exception as e:
-        print(f"Error fetching JD from portal {url}: {e}")
+            return ' '.join(soup.stripped_strings)[:3500]
+    except Exception:
+        pass
     return ""
 
 
 def search_enterprise_ats_jobs():
-    """
-    Searches enterprise ATS systems and direct company career portals for roles in India.
-    """
     ats_queries = [
         'site:myworkdayjobs.com ("Data Analyst" OR "Business Analyst" OR "Power Platform" OR "Copilot Studio") ("India" OR "Gurgaon" OR "Gurugram" OR "Noida" OR "Bangalore")',
         'site:boards.greenhouse.io OR site:job-boards.greenhouse.io ("Product Analyst" OR "Data Analyst" OR "Process Automation") ("India" OR "Remote" OR "Gurgaon" OR "Bangalore")',
         'site:jobs.lever.co ("Data Analyst" OR "Business Analyst" OR "APM" OR "Power Automate") ("India" OR "Remote" OR "Gurugram")',
         'site:jobs.ashbyhq.com ("Product Analyst" OR "Data Analyst" OR "Analytics Engineer" OR "Business Analyst") ("India" OR "Remote")',
-        'site:jobs.smartrecruiters.com ("Process Automation" OR "Power Platform" OR "Data Analyst" OR "Operations Analyst") India',
-        '(site:careers.google.com OR site:amazon.jobs OR site:jobs.siemens.com OR site:careers.microsoft.com) ("Analyst" OR "Automation") ("Gurugram" OR "Noida" OR "Delhi" OR "Bangalore")'
+        'site:jobs.smartrecruiters.com ("Process Automation" OR "Power Platform" OR "Data Analyst" OR "Operations Analyst") India'
     ]
     
     discovered = []
     if not SEARCH_KEY:
-        print("[DEBUG] No SEARCH_KEY found. Skipping direct company portal search.")
         return discovered
 
     for query in ats_queries:
@@ -317,33 +333,29 @@ def search_enterprise_ats_jobs():
                 "api_key": SEARCH_KEY,
                 "gl": "in",
                 "hl": "en",
-                "num": 10
+                "num": 8
             }
-            res = requests.get(url, params=params, timeout=15).json()
+            res = requests.get(url, params=params, timeout=12).json()
             for item in res.get("organic_results", []):
                 link = item.get("link", "")
                 raw_title = item.get("title", "")
                 snippet = item.get("snippet", "")
-                
-                # Clean title
-                title = re.sub(r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs).*", "", raw_title, flags=re.IGNORECASE).strip()
+                title = re.sub(r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs|Careers).*", "", raw_title, flags=re.IGNORECASE).strip()
                 company = extract_company_from_url(link)
                 
-                if link and is_role_relevant(title):
-                    # Fetch direct page context or use snippet
-                    full_desc = fetch_portal_description(link) or snippet
-                    
+                if link:
                     discovered.append({
                         "title": title,
                         "company": company,
                         "job_url": link,
                         "location": "Delhi NCR / Remote / Bangalore",
-                        "description": full_desc,
+                        "description": snippet,
                         "min_amount": 0,
-                        "max_amount": 0
+                        "max_amount": 0,
+                        "is_direct_ats": True
                     })
         except Exception as e:
-            print(f"ATS search error for query '{query}': {e}")
+            print(f"ATS search error: {e}")
             
     return discovered
 
@@ -351,10 +363,9 @@ def search_enterprise_ats_jobs():
 # ----------------- GEMINI ASSET GENERATION -----------------
 def generate_application_kit(title, company, description):
     prompt = f"""
-You are an expert executive resume writer, ATS optimization specialist, and career strategist
-tailoring application documents for Kartik Bhatt (~3.5 years of experience).
+You are an expert executive resume writer and ATS optimization specialist tailoring documents for Kartik Bhatt (~3.5 years of experience).
 
-Candidate Profile (ground truth — never fabricate skills or employment):
+Candidate Ground Truth:
 {KARTIK_PROFILE}
 
 Target Job Opening:
@@ -362,27 +373,19 @@ Title: {title}
 Company: {company}
 JD Snippet: {description[:2200]}
 
-CRITICAL RULES FOR RESUME VS COVER LETTER:
-1. RESUME PROFESSIONAL SUMMARY RULES:
-- DO NOT mention "{company}" or "seeking to work at {company}" anywhere in the tailored_summary.
-- Frame it around his 3.5+ years of experience, core domains (Power Platform, GenAI Agents, Data/Product Analytics, Automation), and quantifiable business impact.
-
-2. ATS KEYWORDS & SKILLS ALIGNMENT:
-- Extract 10-14 exact technical & functional skills directly from the JD backed by Kartik's profile.
-
-3. QUANTIFIED BULLETS:
-- Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven.
-
-4. COVER LETTER:
-- Actively reference {company} and {title}, explaining why Kartik is interested and how his results solve their needs.
+CRITICAL RULES:
+1. RESUME SUMMARY: Dense, 3-4 sentence executive summary highlighting Kartik's process automation, Copilot/GenAI agents, Power Platform, and analytics background. DO NOT mention {company} in the summary.
+2. ATS KEYWORDS: 10-14 exact matching technical & domain keywords backed by Kartik's background.
+3. QUANTIFIED BULLETS: Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven.
+4. COVER LETTER: Reference {company} and {title}, articulating why Kartik is a strong fit.
 
 Return ONLY a valid JSON object matching this schema:
 {{
 "match_score": "e.g., 94%",
-"reason": "1-2 sentences on why Kartik's exact tech stack and experience fit this role.",
+"reason": "1-2 sentences on why Kartik's exact tech stack fits this role.",
 "skills_gap": "Any missing tool/skill or 'None'",
-"ats_keywords": ["10-14 exact matching technical/domain keywords"],
-"tailored_summary": "A 3-4 sentence dense executive summary highlighting Kartik's expertise in process automation, analytics, and GenAI agent development. Must NOT mention {company}.",
+"ats_keywords": ["10-14 exact keywords"],
+"tailored_summary": "Executive summary...",
 "kpmg_project_bullets": [
     "Quantified bullet on Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved",
     "Quantified bullet on SPO migration: 45+ pillars, 3 Power Automate flows, change management",
@@ -413,7 +416,7 @@ Return ONLY a valid JSON object matching this schema:
 """
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -422,13 +425,9 @@ Return ONLY a valid JSON object matching this schema:
         print(f"AI Generation error: {e}")
         return {
             "match_score": "88%",
-            "reason": "Strong alignment with Kartik's Power Platform, GenAI agent building, and operations/analytics background.",
+            "reason": "Strong alignment with Kartik's Power Platform, GenAI agents, and analytics background.",
             "skills_gap": "None",
-            "ats_keywords": [
-                "Power Platform", "Power Automate", "Power BI", "Power Apps", "Copilot Studio",
-                "GenAI Agents", "SQL", "Process Automation", "Stakeholder Management",
-                "Change Management", "SharePoint Online", "Data Analytics", "RFP/RFI Management"
-            ],
+            "ats_keywords": ["Power Platform", "Power Automate", "Power BI", "Power Apps", "Copilot Studio", "GenAI Agents", "SQL", "Process Automation"],
             "tailored_summary": "Solutions-driven analyst with ~3.5+ years of experience across KPMG and GlobalLogic specializing in enterprise process automation, Microsoft Power Platform architectures, GenAI agent implementation, and data-driven operational optimization.",
             "kpmg_project_bullets": [
                 "Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.",
@@ -452,9 +451,9 @@ Return ONLY a valid JSON object matching this schema:
             "cover_letter_subject": f"Subject: Application for {title} - Kartik Bhatt",
             "cover_letter_paragraphs": [
                 f"I am excited to apply for the {title} position at {company}. With over 3.5 years of experience at KPMG and GlobalLogic, I specialize in process automation, Power Platform ecosystems, and Copilot AI agents.",
-                "At KPMG, I built a complete Power Platform solution driving 20,000 reach outs annually across 13 sectors and architected an automated multi-modal Copilot agent.",
+                "At KPMG, I built a complete Power Platform solution driving 20,000 reach outs annually and architected automated GenAI workflows.",
                 "At GlobalLogic, I engineered QA frameworks for Google's GenAI training datasets, lifting delivery quality from 74% to 95%.",
-                f"I would welcome the opportunity to bring this operational and technical expertise to {company}. Thank you for your time and consideration."
+                f"I welcome the opportunity to bring this technical expertise to {company}. Thank you for your consideration."
             ]
         }
 
@@ -553,11 +552,10 @@ def send_telegram_alert(title, company, location, tier, exp_detected, url, salar
     safe_company = company.replace("*", "").replace("_", " ")
     safe_location = location.replace("*", "").replace("_", " ")
 
-    # Identify whether source is direct portal or job board
-    source_tag = "🏢 Company Career Portal" if any(k in url for k in ["greenhouse", "lever.co", "workday", "ashby", "smartrecruiters", "amazon", "google", "microsoft"]) else "💼 Job Board (LinkedIn)"
+    source_tag = "🏢 Company Career Portal" if any(k in url for k in ["greenhouse", "lever.co", "workday", "ashby", "smartrecruiters"]) else "💼 Job Board (LinkedIn)"
 
     message_text = (
-        f"🎯 *New Qualified Job Matched for Kartik!*\n\n"
+        f"🎯 *New High-Fit Role Matched for Kartik!*\n\n"
         f"📌 *Role:* {safe_title}\n"
         f"🏢 *Company:* {safe_company} ({source_tag})\n"
         f"📍 *Location:* {safe_location} ({tier})\n"
@@ -592,18 +590,20 @@ def run():
 
     all_jobs = []
 
-    # 1. Scrape standard job boards
+    # 1. Scrape standard job boards (LinkedIn focused on target skill queries)
     try:
         board_jobs = scrape_jobs(
-            site_name=["linkedin", "indeed"],
-            search_term='"Data Analyst" OR "Business Analyst" OR "Product Analyst" OR "Associate Product Manager" OR "Copilot Studio" OR "Power Automate" OR "Power Platform"',
+            site_name=["linkedin"],
+            search_term='"Power Platform" OR "Copilot Studio" OR "Power Automate" OR "Business Analyst" OR "Data Analyst"',
             location="India",
-            results_wanted=35,
-            hours_old=24,
+            results_wanted=40,
+            hours_old=48,
             country_indeed='india'
         )
         for _, row in board_jobs.iterrows():
-            all_jobs.append(row.to_dict())
+            job_dict = row.to_dict()
+            job_dict["is_direct_ats"] = False
+            all_jobs.append(job_dict)
         print(f"[DEBUG] Job boards returned {len(board_jobs)} raw listings.")
     except Exception as e:
         print(f"[DEBUG] Scraper error: {e}")
@@ -618,14 +618,12 @@ def run():
     skip_counts = {
         "no_url": 0,
         "already_seen": 0,
-        "senior_or_irrelevant": 0,
+        "skill_or_role_mismatch": 0,
         "exp_too_high": 0,
-        "invalid_location": 0,
         "salary_check": 0
     }
 
-    tier_1_matches = []
-    tier_2_matches = []
+    qualified_jobs = []
 
     for job in all_jobs:
         url = str(job.get('job_url') or '')
@@ -635,7 +633,6 @@ def run():
         min_sal = job.get('min_amount')
         max_sal = job.get('max_amount')
         desc = str(job.get('description') or '')
-        full_text = f"{title} {desc}"
 
         if not url or url == 'nan':
             skip_counts["no_url"] += 1
@@ -645,9 +642,17 @@ def run():
             skip_counts["already_seen"] += 1
             continue
 
-        # Role & Seniority Validation
-        if not is_role_relevant(title):
-            skip_counts["senior_or_irrelevant"] += 1
+        # If ATS portal, fetch full content if snippet is too short
+        if job.get("is_direct_ats") and len(desc) < 300:
+            full_desc = fetch_portal_description(url)
+            if full_desc:
+                desc = full_desc
+
+        full_text = f"{title} {desc}"
+
+        # Strict Role & Core Skill Stack Alignment
+        if not is_role_and_skill_relevant(title, desc):
+            skip_counts["skill_or_role_mismatch"] += 1
             continue
 
         # Experience Cap Filtering
@@ -657,13 +662,9 @@ def run():
             print(f"[DEBUG] Rejected (Exp {min_exp}+ yrs > {MAX_EXPERIENCE_CAP}): '{title}' @ {company}")
             continue
 
-        # Location Tiering Check
         loc_valid, loc_tier = classify_location(location)
-        if not loc_valid:
-            skip_counts["invalid_location"] += 1
-            continue
 
-        # Salary Extraction / Estimation & Minimum Floor Verification
+        # Salary Extraction / Estimation & Minimum Floor Verification via Gemini 3.6 Flash
         passes_sal, salary_range = get_salary_range_and_check(
             title=title,
             company=company,
@@ -681,7 +682,7 @@ def run():
 
         exp_str = f"{min_exp}+ Years" if min_exp else "2–5 Years / Unspecified"
 
-        job_payload = {
+        qualified_jobs.append({
             "title": title,
             "company": company,
             "location": location,
@@ -690,17 +691,12 @@ def run():
             "url": url,
             "salary_range": salary_range,
             "desc": desc
-        }
+        })
 
-        if "Tier 1" in loc_tier:
-            tier_1_matches.append(job_payload)
-        else:
-            tier_2_matches.append(job_payload)
+    print(f"[DEBUG] Total high-relevance qualified candidates: {len(qualified_jobs)}")
 
-    # Prioritize Tier 1; fallback to Tier 2 if volume is low
-    dispatch_queue = list(tier_1_matches)
-    if len(tier_1_matches) < 3:
-        dispatch_queue.extend(tier_2_matches)
+    # Dispatch top 10 best matches per run to prevent flood while prioritizing quality
+    dispatch_queue = qualified_jobs[:10]
 
     dispatched = 0
     for qualified in dispatch_queue:
@@ -757,15 +753,14 @@ def run():
         )
 
         dispatched += 1
-        print(f"Dispatched text alert for: {qualified['title']} at {qualified['company']} ({qualified['tier']}) [{qualified['salary_range']}]")
+        print(f"Dispatched text alert for: {qualified['title']} at {qualified['company']} [{qualified['salary_range']}]")
 
     print(
         f"\n[DEBUG] Run summary — Dispatched: {dispatched} | "
-        f"Tier 1 matches: {len(tier_1_matches)} | Tier 2 matches: {len(tier_2_matches)} | "
+        f"Qualified Found: {len(qualified_jobs)} | "
         f"Skipped high exp: {skip_counts['exp_too_high']} | "
         f"Skipped below salary floor: {skip_counts['salary_check']} | "
-        f"Skipped non-target roles: {skip_counts['senior_or_irrelevant']} | "
-        f"Skipped invalid location: {skip_counts['invalid_location']}"
+        f"Skipped non-target/skill mismatch: {skip_counts['skill_or_role_mismatch']}"
     )
 
 
