@@ -78,7 +78,6 @@ ROLES_WHITELIST = [
     r"\bproduct operations\b", r"\bai analyst\b", r"\bautomation analyst\b"
 ]
 
-# Essential skill keywords: JD must match at least 2 of these to qualify
 CORE_SKILLS_KEYWORDS = [
     r"\bpower automate\b", r"\bpower platform\b", r"\bpower apps\b", r"\bpower bi\b",
     r"\bcopilot\b", r"\bgenai\b", r"\bllm\b", r"\bsharepoint\b", r"\bvba\b",
@@ -94,8 +93,6 @@ EXCLUDED_DOMAINS = [
 ]
 
 # ----------------- LOCATION HANDLING -----------------
-# Patterns used to decide which *tier* a location belongs to (matching is
-# done against the raw, lowercased location string).
 LOCATIONS_TIER_1 = [
     r"\bdelhi\b", r"\bnew delhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b",
     r"\bnoida\b", r"\bfaridabad\b", r"\bghaziabad\b",
@@ -105,9 +102,6 @@ LOCATIONS_TIER_2 = [
     r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b", r"\bmumbai\b"
 ]
 
-# Canonical (pattern, clean display name) pairs, checked in order.
-# Any patterns that match get joined into a clean label, e.g.
-# "Gurugram, Haryana, India" -> "Gurugram", "Remote (India)" -> "Remote".
 LOCATION_CANONICAL = [
     (r"\bremote\b|\bwfh\b|\bwork from home\b", "Remote"),
     (r"\bgurugram\b|\bgurgaon\b", "Gurugram"),
@@ -216,20 +210,16 @@ def is_role_and_skill_relevant(title: str, description: str) -> bool:
     d = description.lower()
     full_text = f"{t} {d}"
 
-    # 1. Exclude forbidden domain terms
     for bad in EXCLUDED_DOMAINS:
         if re.search(r'\b' + re.escape(bad) + r'\b', t):
             return False
 
-    # 2. Exclude Senior / Staff / Director roles
     if is_seniority_excluded(title):
         return False
 
-    # 3. Must match a target role title
     if not any(re.search(good, t) for good in ROLES_WHITELIST):
         return False
 
-    # 4. Check core technical alignment: Require at least 2 skill keywords in text
     matched_skills = sum(1 for kw in CORE_SKILLS_KEYWORDS if re.search(kw, full_text))
     return matched_skills >= 2
 
@@ -247,8 +237,6 @@ def extract_min_experience(text: str):
 
 
 def extract_clean_location(location_str: str) -> str:
-    """Turn a messy scraped/ATS location string into a clean, readable
-    label such as 'Gurugram', 'Delhi / Remote', 'Bengaluru', etc."""
     loc = str(location_str).lower()
     matched = []
     for pattern, name in LOCATION_CANONICAL:
@@ -263,12 +251,6 @@ def extract_clean_location(location_str: str) -> str:
 
 
 def classify_location(location_str: str):
-    """Returns (is_valid, tier_label, clean_location).
-
-    is_valid is False for locations clearly outside the target cities
-    (e.g. Chennai, Kolkata, Ahmedabad) so callers can actually skip them,
-    instead of silently defaulting everything to Tier 1.
-    """
     loc = str(location_str).lower()
     clean = extract_clean_location(location_str)
 
@@ -277,17 +259,14 @@ def classify_location(location_str: str):
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_2):
         return True, "Tier 2 (Bangalore / Hyderabad / Pune)", clean
     if re.search(r"\bindia\b", loc):
-        # Unspecified-but-India roles: keep as Tier 1 default only when no
-        # more specific (and non-target) city was actually detected.
         return True, "Tier 1 (Delhi-NCR / Remote)", clean
     return False, "Excluded", clean
 
 
-# ----------------- GEMINI 3.6 FLASH COMPENSATION ANALYZER -----------------
+# ----------------- GEMINI COMPENSATION ANALYZER -----------------
 def get_salary_range_and_check(title: str, company: str, location: str, description: str, tier: str, min_sal=None, max_sal=None):
     min_floor = 1000000 if "Tier 1" in tier else 1400000
 
-    # 1. Directly parsed salary from scraper
     if max_sal and float(max_sal) > 0:
         actual_min = float(min_sal) if min_sal and float(min_sal) > 0 else float(max_sal) * 0.8
         actual_max = float(max_sal)
@@ -295,7 +274,6 @@ def get_salary_range_and_check(title: str, company: str, location: str, descript
             return False, ""
         return True, f"₹{actual_min/100000:.1f} - ₹{actual_max/100000:.1f} LPA"
 
-    # 2. Dynamic evaluation via Gemini 3.6 Flash
     prompt = f"""
 You are an expert Indian tech industry compensation analyst.
 Analyze the expected total annual CTC (in INR / LPA) for this role given Kartik Bhatt's profile (~3.5 years of experience at KPMG & GlobalLogic, BCA CS 9.3 GPA, Power Platform, Copilot Studio, Analytics, SQL, Python):
@@ -307,7 +285,7 @@ Job Description: {description[:2500]}
 
 Rules:
 1. If the job description lists compensation, extract it directly.
-2. Otherwise, estimate a realistic, dynamic CTC range based on the company tier (e.g. MNC, Tier 1 Product, Consulting, Fast-growing Startup), candidate's ~3.5 YOE, and specific role complexity. Do NOT output a generic placeholder range like 12-16 LPA unless that is genuinely accurate for this company and level.
+2. Otherwise, estimate a realistic CTC range based on the company tier, candidate's ~3.5 YOE, and specific role complexity.
 3. Determine `passes_floor`: true if max_inr >= {min_floor}, false otherwise.
 
 Return ONLY a valid JSON object matching this schema:
@@ -320,7 +298,7 @@ Return ONLY a valid JSON object matching this schema:
 """
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -366,17 +344,22 @@ def fetch_portal_description(url: str) -> str:
 
 
 def search_enterprise_ats_jobs():
-    ats_queries = [
-        'site:myworkdayjobs.com ("Data Analyst" OR "Business Analyst" OR "Power Platform" OR "Copilot Studio") ("India" OR "Gurgaon" OR "Gurugram" OR "Noida" OR "Bangalore")',
-        'site:boards.greenhouse.io OR site:job-boards.greenhouse.io ("Product Analyst" OR "Data Analyst" OR "Process Automation") ("India" OR "Remote" OR "Gurgaon" OR "Bangalore")',
-        'site:jobs.lever.co ("Data Analyst" OR "Business Analyst" OR "APM" OR "Power Automate") ("India" OR "Remote" OR "Gurugram")',
-        'site:jobs.ashbyhq.com ("Product Analyst" OR "Data Analyst" OR "Analytics Engineer" OR "Business Analyst") ("India" OR "Remote")',
-        'site:jobs.smartrecruiters.com ("Process Automation" OR "Power Platform" OR "Data Analyst" OR "Operations Analyst") India'
-    ]
-
+    """Optimized to consume only 2 SearchAPI queries total across all ATS platforms."""
     discovered = []
     if not SEARCH_KEY:
         return discovered
+
+    # Negative keyword string directly in search to avoid burning result capacity
+    negatives = '-"Senior Manager" -Director -VP -Intern -Lead -HR -Talent'
+    locations = '("Gurgaon" OR "Gurugram" OR "Noida" OR "Delhi" OR "Bangalore" OR "Remote")'
+    ats_sites = '(site:myworkdayjobs.com OR site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:smartrecruiters.com)'
+
+    ats_queries = [
+        # Call 1: Power Platform, Process Automation, Copilot Focus
+        f'{ats_sites} intitle:("Power Platform" OR "Power Automate" OR "Process Automation" OR "Copilot Studio" OR "Automation Analyst") {locations} {negatives}',
+        # Call 2: Core Data, APM, and Business Analytics Focus
+        f'{ats_sites} intitle:("Data Analyst" OR "Business Analyst" OR "Product Analyst" OR "APM") ("Power BI" OR "SQL" OR "Python" OR "Automate") {locations} {negatives}'
+    ]
 
     for query in ats_queries:
         try:
@@ -387,14 +370,20 @@ def search_enterprise_ats_jobs():
                 "api_key": SEARCH_KEY,
                 "gl": "in",
                 "hl": "en",
-                "num": 8
+                "num": 25,                 # Maximize results per paid call
+                "time_period": "last_week" # Exclude old 404 links
             }
             res = requests.get(url, params=params, timeout=12).json()
             for item in res.get("organic_results", []):
                 link = item.get("link", "")
                 raw_title = item.get("title", "")
                 snippet = item.get("snippet", "")
-                title = re.sub(r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs|Careers).*", "", raw_title, flags=re.IGNORECASE).strip()
+                title = re.sub(
+                    r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs|Careers).*",
+                    "",
+                    raw_title,
+                    flags=re.IGNORECASE
+                ).strip()
                 company = extract_company_from_url(link)
 
                 if link:
@@ -402,10 +391,6 @@ def search_enterprise_ats_jobs():
                         "title": title,
                         "company": company,
                         "job_url": link,
-                        # Generic placeholder — classify_location() /
-                        # extract_clean_location() will resolve this into
-                        # a specific city (or exclude it) once the JD/
-                        # snippet text is available.
                         "location": snippet or "India",
                         "description": snippet,
                         "min_amount": 0,
@@ -474,7 +459,7 @@ Return ONLY a valid JSON object matching this schema:
 """
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -648,7 +633,7 @@ def run():
 
     all_jobs = []
 
-    # 1. Scrape standard job boards (LinkedIn focused on target skill queries)
+    # 1. Scrape standard job boards (LinkedIn)
     try:
         board_jobs = scrape_jobs(
             site_name=["linkedin"],
@@ -666,7 +651,7 @@ def run():
     except Exception as e:
         print(f"[DEBUG] Scraper error: {e}")
 
-    # 2. Add Direct ATS & Company Portal Hits
+    # 2. Add Direct ATS & Company Portal Hits (Cost-optimized: 2 SearchAPI calls)
     ats_jobs = search_enterprise_ats_jobs()
     print(f"[DEBUG] Direct Enterprise ATS search returned {len(ats_jobs)} raw portal listings.")
     all_jobs.extend(ats_jobs)
@@ -701,13 +686,11 @@ def run():
             skip_counts["already_seen"] += 1
             continue
 
-        # If ATS portal, fetch full content if snippet is too short
+        # Fetch full ATS text if snippet is under 300 characters
         if job.get("is_direct_ats") and len(desc) < 300:
             full_desc = fetch_portal_description(url)
             if full_desc:
                 desc = full_desc
-                # If the location was only a generic placeholder, try to
-                # pick up a more specific one from the full JD text.
                 if location.strip().lower() in ("india", ""):
                     location = desc
 
@@ -732,7 +715,7 @@ def run():
             print(f"[DEBUG] Rejected (Location outside target cities: '{clean_location}'): '{title}' @ {company}")
             continue
 
-        # Salary Extraction / Estimation & Minimum Floor Verification via Gemini 3.6 Flash
+        # Salary Extraction / Estimation via Gemini
         passes_sal, salary_range = get_salary_range_and_check(
             title=title,
             company=company,
@@ -763,7 +746,7 @@ def run():
 
     print(f"[DEBUG] Total high-relevance qualified candidates: {len(qualified_jobs)}")
 
-    # Dispatch top 10 best matches per run to prevent flood while prioritizing quality
+    # Dispatch top 10 best matches per run
     dispatch_queue = qualified_jobs[:10]
 
     dispatched = 0
