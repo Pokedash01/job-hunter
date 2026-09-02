@@ -93,8 +93,34 @@ EXCLUDED_DOMAINS = [
     "surveyor", "field data", "manufacturing operating", "master data management"
 ]
 
-LOCATIONS_TIER_1 = [r"\bdelhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b", r"\bnoida\b", r"\bfaridabad\b", r"\bremote\b", r"\bwfh\b", r"\bwork from home\b", r"\bindia\b"]
-LOCATIONS_TIER_2 = [r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b", r"\bmumbai\b"]
+# ----------------- LOCATION HANDLING -----------------
+# Patterns used to decide which *tier* a location belongs to (matching is
+# done against the raw, lowercased location string).
+LOCATIONS_TIER_1 = [
+    r"\bdelhi\b", r"\bnew delhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b",
+    r"\bnoida\b", r"\bfaridabad\b", r"\bghaziabad\b",
+    r"\bremote\b", r"\bwfh\b", r"\bwork from home\b"
+]
+LOCATIONS_TIER_2 = [
+    r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b", r"\bmumbai\b"
+]
+
+# Canonical (pattern, clean display name) pairs, checked in order.
+# Any patterns that match get joined into a clean label, e.g.
+# "Gurugram, Haryana, India" -> "Gurugram", "Remote (India)" -> "Remote".
+LOCATION_CANONICAL = [
+    (r"\bremote\b|\bwfh\b|\bwork from home\b", "Remote"),
+    (r"\bgurugram\b|\bgurgaon\b", "Gurugram"),
+    (r"\bnoida\b", "Noida"),
+    (r"\bfaridabad\b", "Faridabad"),
+    (r"\bghaziabad\b", "Ghaziabad"),
+    (r"\bnew delhi\b|\bdelhi\b|\bncr\b", "Delhi"),
+    (r"\bbengaluru\b|\bbangalore\b", "Bengaluru"),
+    (r"\bhyderabad\b", "Hyderabad"),
+    (r"\bpune\b", "Pune"),
+    (r"\bmumbai\b", "Mumbai"),
+]
+
 MAX_EXPERIENCE_CAP = 5.5
 
 EXCEL_FILE = "job_applications.xlsx"
@@ -220,13 +246,41 @@ def extract_min_experience(text: str):
     return min(years) if years else None
 
 
-def classify_location(location_str: str):
+def extract_clean_location(location_str: str) -> str:
+    """Turn a messy scraped/ATS location string into a clean, readable
+    label such as 'Gurugram', 'Delhi / Remote', 'Bengaluru', etc."""
     loc = str(location_str).lower()
+    matched = []
+    for pattern, name in LOCATION_CANONICAL:
+        if re.search(pattern, loc) and name not in matched:
+            matched.append(name)
+    if matched:
+        return " / ".join(matched)
+    if re.search(r"\bindia\b", loc):
+        return "India (Other)"
+    cleaned = str(location_str).strip()
+    return cleaned if cleaned and cleaned.lower() != "nan" else "Unspecified"
+
+
+def classify_location(location_str: str):
+    """Returns (is_valid, tier_label, clean_location).
+
+    is_valid is False for locations clearly outside the target cities
+    (e.g. Chennai, Kolkata, Ahmedabad) so callers can actually skip them,
+    instead of silently defaulting everything to Tier 1.
+    """
+    loc = str(location_str).lower()
+    clean = extract_clean_location(location_str)
+
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_1):
-        return True, "Tier 1 (Delhi-NCR / Remote)"
+        return True, "Tier 1 (Delhi-NCR / Remote)", clean
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_2):
-        return True, "Tier 2 (Bangalore / Hyderabad / Pune)"
-    return True, "Tier 1 (Delhi-NCR / Remote)"  # Default India roles to Tier 1
+        return True, "Tier 2 (Bangalore / Hyderabad / Pune)", clean
+    if re.search(r"\bindia\b", loc):
+        # Unspecified-but-India roles: keep as Tier 1 default only when no
+        # more specific (and non-target) city was actually detected.
+        return True, "Tier 1 (Delhi-NCR / Remote)", clean
+    return False, "Excluded", clean
 
 
 # ----------------- GEMINI 3.6 FLASH COMPENSATION ANALYZER -----------------
@@ -319,7 +373,7 @@ def search_enterprise_ats_jobs():
         'site:jobs.ashbyhq.com ("Product Analyst" OR "Data Analyst" OR "Analytics Engineer" OR "Business Analyst") ("India" OR "Remote")',
         'site:jobs.smartrecruiters.com ("Process Automation" OR "Power Platform" OR "Data Analyst" OR "Operations Analyst") India'
     ]
-    
+
     discovered = []
     if not SEARCH_KEY:
         return discovered
@@ -342,13 +396,17 @@ def search_enterprise_ats_jobs():
                 snippet = item.get("snippet", "")
                 title = re.sub(r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs|Careers).*", "", raw_title, flags=re.IGNORECASE).strip()
                 company = extract_company_from_url(link)
-                
+
                 if link:
                     discovered.append({
                         "title": title,
                         "company": company,
                         "job_url": link,
-                        "location": "Delhi NCR / Remote / Bangalore",
+                        # Generic placeholder — classify_location() /
+                        # extract_clean_location() will resolve this into
+                        # a specific city (or exclude it) once the JD/
+                        # snippet text is available.
+                        "location": snippet or "India",
                         "description": snippet,
                         "min_amount": 0,
                         "max_amount": 0,
@@ -356,7 +414,7 @@ def search_enterprise_ats_jobs():
                     })
         except Exception as e:
             print(f"ATS search error: {e}")
-            
+
     return discovered
 
 
@@ -620,6 +678,7 @@ def run():
         "already_seen": 0,
         "skill_or_role_mismatch": 0,
         "exp_too_high": 0,
+        "location_excluded": 0,
         "salary_check": 0
     }
 
@@ -647,6 +706,10 @@ def run():
             full_desc = fetch_portal_description(url)
             if full_desc:
                 desc = full_desc
+                # If the location was only a generic placeholder, try to
+                # pick up a more specific one from the full JD text.
+                if location.strip().lower() in ("india", ""):
+                    location = desc
 
         full_text = f"{title} {desc}"
 
@@ -662,13 +725,18 @@ def run():
             print(f"[DEBUG] Rejected (Exp {min_exp}+ yrs > {MAX_EXPERIENCE_CAP}): '{title}' @ {company}")
             continue
 
-        loc_valid, loc_tier = classify_location(location)
+        # Location classification & clean labeling
+        loc_valid, loc_tier, clean_location = classify_location(location)
+        if not loc_valid:
+            skip_counts["location_excluded"] += 1
+            print(f"[DEBUG] Rejected (Location outside target cities: '{clean_location}'): '{title}' @ {company}")
+            continue
 
         # Salary Extraction / Estimation & Minimum Floor Verification via Gemini 3.6 Flash
         passes_sal, salary_range = get_salary_range_and_check(
             title=title,
             company=company,
-            location=location,
+            location=clean_location,
             description=desc,
             tier=loc_tier,
             min_sal=min_sal,
@@ -685,7 +753,7 @@ def run():
         qualified_jobs.append({
             "title": title,
             "company": company,
-            "location": location,
+            "location": clean_location,
             "tier": loc_tier,
             "exp_detected": exp_str,
             "url": url,
@@ -759,6 +827,7 @@ def run():
         f"\n[DEBUG] Run summary — Dispatched: {dispatched} | "
         f"Qualified Found: {len(qualified_jobs)} | "
         f"Skipped high exp: {skip_counts['exp_too_high']} | "
+        f"Skipped location excluded: {skip_counts['location_excluded']} | "
         f"Skipped below salary floor: {skip_counts['salary_check']} | "
         f"Skipped non-target/skill mismatch: {skip_counts['skill_or_role_mismatch']}"
     )
