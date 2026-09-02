@@ -99,7 +99,7 @@ LOCATIONS_TIER_1 = [
     r"\bremote\b", r"\bwfh\b", r"\bwork from home\b"
 ]
 LOCATIONS_TIER_2 = [
-    r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b", r"\bmumbai\b"
+    r"\bbangalore\b", r"\bbengaluru\b", r"\bhyderabad\b", r"\bpune\b", r"\bjaipur\b"
 ]
 
 LOCATION_CANONICAL = [
@@ -237,7 +237,7 @@ def extract_min_experience(text: str):
 
 
 def extract_clean_location(text_to_search: str) -> str:
-    """Scans text for canonical Indian locations or remote designations, never returning raw sentences."""
+    """Scans text for canonical target locations or remote designations, never returning raw sentences."""
     loc = str(text_to_search).lower()
     matched = []
     for pattern, name in LOCATION_CANONICAL:
@@ -251,9 +251,7 @@ def extract_clean_location(text_to_search: str) -> str:
 
 
 def classify_location(location_str: str, fallback_text: str = ""):
-    """Classifies tier and returns (is_valid, tier_label, clean_location).
-    If location_str does not contain target locations, inspects fallback_text.
-    """
+    """Classifies tier internally and returns (is_valid, tier_label, clean_location)."""
     clean = extract_clean_location(location_str)
     if clean == "Unspecified" and fallback_text:
         clean = extract_clean_location(fallback_text)
@@ -261,11 +259,11 @@ def classify_location(location_str: str, fallback_text: str = ""):
     loc = clean.lower()
 
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_1):
-        return True, "Tier 1 (Delhi-NCR / Remote)", clean
+        return True, "Tier 1", clean
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_2):
-        return True, "Tier 2 (Bangalore / Hyderabad / Pune)", clean
+        return True, "Tier 2", clean
     if "india" in loc:
-        return True, "Tier 1 (Delhi-NCR / Remote)", clean
+        return True, "Tier 1", clean
 
     return False, "Excluded", clean
 
@@ -287,7 +285,7 @@ Analyze the expected total annual CTC (in INR / LPA) for this role given Kartik 
 
 Job Title: {title}
 Company: {company}
-Location: {location} ({tier})
+Location: {location}
 Job Description: {description[:2500]}
 
 Rules:
@@ -389,7 +387,6 @@ def search_enterprise_ats_jobs():
                 ).strip()
                 company = extract_company_from_url(link)
 
-                # Pull out clean location from snippet, falling back to India
                 inferred_loc = extract_clean_location(snippet)
                 if inferred_loc == "Unspecified":
                     inferred_loc = "India"
@@ -598,7 +595,7 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
 
 # ----------------- TELEGRAM DISPATCHER -----------------
-def send_telegram_alert(title, company, location, tier, exp_detected, url, salary_range, kit, resume_link, cl_link):
+def send_telegram_alert(title, company, location, exp_detected, url, salary_range, kit, resume_link, cl_link):
     safe_title = title.replace("*", "").replace("_", " ")
     safe_company = company.replace("*", "").replace("_", " ")
     safe_location = location.replace("*", "").replace("_", " ")
@@ -607,7 +604,7 @@ def send_telegram_alert(title, company, location, tier, exp_detected, url, salar
         f"🎯 *New High-Fit Role Matched for Kartik!*\n\n"
         f"📌 *Role:* {safe_title}\n"
         f"🏢 *Company:* {safe_company}\n"
-        f"📍 *Location:* {safe_location} ({tier})\n"
+        f"📍 *Location:* {safe_location}\n"
         f"⏳ *Experience Required:* {exp_detected}\n"
         f"💰 *Salary Range:* {salary_range}\n"
         f"📊 *Fit Score:* {kit.get('match_score')}\n"
@@ -712,7 +709,7 @@ def run():
             print(f"[DEBUG] Rejected (Exp {min_exp}+ yrs > {MAX_EXPERIENCE_CAP}): '{title}' @ {company}")
             continue
 
-        # Robust location classification and text fallback
+        # Location classification and fallback to job description
         loc_valid, loc_tier, clean_location = classify_location(raw_location, fallback_text=desc)
         if not loc_valid:
             skip_counts["location_excluded"] += 1
@@ -775,7 +772,6 @@ def run():
             title=qualified["title"],
             company=qualified["company"],
             location=qualified["location"],
-            tier=qualified["tier"],
             exp_detected=qualified["exp_detected"],
             url=qualified["url"],
             salary_range=qualified["salary_range"],
@@ -789,7 +785,7 @@ def run():
             company=qualified["company"],
             salary_range=qualified["salary_range"],
             fit_score=kit.get("match_score"),
-            location=f'{qualified["location"]} ({qualified["tier"]})',
+            location=qualified["location"],
             resume_link=resume_link,
             cover_letter_link=cl_link,
             job_link=qualified["url"]
@@ -800,14 +796,14 @@ def run():
             company=qualified["company"],
             salary_range=qualified["salary_range"],
             fit_score=kit.get("match_score"),
-            location=f'{qualified["location"]} ({qualified["tier"]})',
+            location=qualified["location"],
             resume_link=resume_link,
             cover_letter_link=cl_link,
             job_link=qualified["url"]
         )
 
         dispatched += 1
-        print(f"Dispatched text alert for: {qualified['title']} at {qualified['company']} [{qualified['salary_range']}]")
+        print(f"Dispatched alert for: {qualified['title']} at {qualified['company']} [{qualified['location']}]")
 
     print(
         f"\n[DEBUG] Run summary — Dispatched: {dispatched} | "
