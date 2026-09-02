@@ -236,8 +236,9 @@ def extract_min_experience(text: str):
     return min(years) if years else None
 
 
-def extract_clean_location(location_str: str) -> str:
-    loc = str(location_str).lower()
+def extract_clean_location(text_to_search: str) -> str:
+    """Scans text for canonical Indian locations or remote designations, never returning raw sentences."""
+    loc = str(text_to_search).lower()
     matched = []
     for pattern, name in LOCATION_CANONICAL:
         if re.search(pattern, loc) and name not in matched:
@@ -245,21 +246,27 @@ def extract_clean_location(location_str: str) -> str:
     if matched:
         return " / ".join(matched)
     if re.search(r"\bindia\b", loc):
-        return "India (Other)"
-    cleaned = str(location_str).strip()
-    return cleaned if cleaned and cleaned.lower() != "nan" else "Unspecified"
+        return "India"
+    return "Unspecified"
 
 
-def classify_location(location_str: str):
-    loc = str(location_str).lower()
+def classify_location(location_str: str, fallback_text: str = ""):
+    """Classifies tier and returns (is_valid, tier_label, clean_location).
+    If location_str does not contain target locations, inspects fallback_text.
+    """
     clean = extract_clean_location(location_str)
+    if clean == "Unspecified" and fallback_text:
+        clean = extract_clean_location(fallback_text)
+
+    loc = clean.lower()
 
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_1):
         return True, "Tier 1 (Delhi-NCR / Remote)", clean
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_2):
         return True, "Tier 2 (Bangalore / Hyderabad / Pune)", clean
-    if re.search(r"\bindia\b", loc):
+    if "india" in loc:
         return True, "Tier 1 (Delhi-NCR / Remote)", clean
+
     return False, "Excluded", clean
 
 
@@ -298,7 +305,7 @@ Return ONLY a valid JSON object matching this schema:
 """
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -308,7 +315,7 @@ Return ONLY a valid JSON object matching this schema:
         return True, data.get("display_range", "₹12 - ₹16 LPA (Est.)")
     except Exception as e:
         print(f"Salary check error for {title} @ {company}: {e}")
-        return True, "₹11 - ₹15 LPA (Est.)"
+        return True, "₹12 - ₹16 LPA (Est.)"
 
 
 # ----------------- DIRECT ATS & COMPANY PORTAL SEARCH -----------------
@@ -344,20 +351,16 @@ def fetch_portal_description(url: str) -> str:
 
 
 def search_enterprise_ats_jobs():
-    """Optimized to consume only 2 SearchAPI queries total across all ATS platforms."""
     discovered = []
     if not SEARCH_KEY:
         return discovered
 
-    # Negative keyword string directly in search to avoid burning result capacity
     negatives = '-"Senior Manager" -Director -VP -Intern -Lead -HR -Talent'
     locations = '("Gurgaon" OR "Gurugram" OR "Noida" OR "Delhi" OR "Bangalore" OR "Remote")'
     ats_sites = '(site:myworkdayjobs.com OR site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:smartrecruiters.com)'
 
     ats_queries = [
-        # Call 1: Power Platform, Process Automation, Copilot Focus
         f'{ats_sites} intitle:("Power Platform" OR "Power Automate" OR "Process Automation" OR "Copilot Studio" OR "Automation Analyst") {locations} {negatives}',
-        # Call 2: Core Data, APM, and Business Analytics Focus
         f'{ats_sites} intitle:("Data Analyst" OR "Business Analyst" OR "Product Analyst" OR "APM") ("Power BI" OR "SQL" OR "Python" OR "Automate") {locations} {negatives}'
     ]
 
@@ -370,8 +373,8 @@ def search_enterprise_ats_jobs():
                 "api_key": SEARCH_KEY,
                 "gl": "in",
                 "hl": "en",
-                "num": 25,                 # Maximize results per paid call
-                "time_period": "last_week" # Exclude old 404 links
+                "num": 25,
+                "time_period": "last_week"
             }
             res = requests.get(url, params=params, timeout=12).json()
             for item in res.get("organic_results", []):
@@ -379,19 +382,24 @@ def search_enterprise_ats_jobs():
                 raw_title = item.get("title", "")
                 snippet = item.get("snippet", "")
                 title = re.sub(
-                    r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs|Careers).*",
+                    r"\s*[-|–]\s*(Greenhouse|Lever|Workday|Ashby|SmartRecruiters|Jobs|Careers|Myworkdayjobs\.com).*",
                     "",
                     raw_title,
                     flags=re.IGNORECASE
                 ).strip()
                 company = extract_company_from_url(link)
 
+                # Pull out clean location from snippet, falling back to India
+                inferred_loc = extract_clean_location(snippet)
+                if inferred_loc == "Unspecified":
+                    inferred_loc = "India"
+
                 if link:
                     discovered.append({
                         "title": title,
                         "company": company,
                         "job_url": link,
-                        "location": snippet or "India",
+                        "location": inferred_loc,
                         "description": snippet,
                         "min_amount": 0,
                         "max_amount": 0,
@@ -459,7 +467,7 @@ Return ONLY a valid JSON object matching this schema:
 """
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -595,12 +603,10 @@ def send_telegram_alert(title, company, location, tier, exp_detected, url, salar
     safe_company = company.replace("*", "").replace("_", " ")
     safe_location = location.replace("*", "").replace("_", " ")
 
-    source_tag = "🏢 Company Career Portal" if any(k in url for k in ["greenhouse", "lever.co", "workday", "ashby", "smartrecruiters"]) else "💼 Job Board (LinkedIn)"
-
     message_text = (
         f"🎯 *New High-Fit Role Matched for Kartik!*\n\n"
         f"📌 *Role:* {safe_title}\n"
-        f"🏢 *Company:* {safe_company} ({source_tag})\n"
+        f"🏢 *Company:* {safe_company}\n"
         f"📍 *Location:* {safe_location} ({tier})\n"
         f"⏳ *Experience Required:* {exp_detected}\n"
         f"💰 *Salary Range:* {salary_range}\n"
@@ -651,7 +657,7 @@ def run():
     except Exception as e:
         print(f"[DEBUG] Scraper error: {e}")
 
-    # 2. Add Direct ATS & Company Portal Hits (Cost-optimized: 2 SearchAPI calls)
+    # 2. Add Direct ATS & Company Portal Hits
     ats_jobs = search_enterprise_ats_jobs()
     print(f"[DEBUG] Direct Enterprise ATS search returned {len(ats_jobs)} raw portal listings.")
     all_jobs.extend(ats_jobs)
@@ -673,7 +679,7 @@ def run():
         url = str(job.get('job_url') or '')
         title = str(job.get('title') or '')
         company = str(job.get('company') or '')
-        location = str(job.get('location') or 'India')
+        raw_location = str(job.get('location') or '')
         min_sal = job.get('min_amount')
         max_sal = job.get('max_amount')
         desc = str(job.get('description') or '')
@@ -686,13 +692,11 @@ def run():
             skip_counts["already_seen"] += 1
             continue
 
-        # Fetch full ATS text if snippet is under 300 characters
+        # Fetch full ATS text if snippet is short
         if job.get("is_direct_ats") and len(desc) < 300:
             full_desc = fetch_portal_description(url)
             if full_desc:
                 desc = full_desc
-                if location.strip().lower() in ("india", ""):
-                    location = desc
 
         full_text = f"{title} {desc}"
 
@@ -708,14 +712,14 @@ def run():
             print(f"[DEBUG] Rejected (Exp {min_exp}+ yrs > {MAX_EXPERIENCE_CAP}): '{title}' @ {company}")
             continue
 
-        # Location classification & clean labeling
-        loc_valid, loc_tier, clean_location = classify_location(location)
+        # Robust location classification and text fallback
+        loc_valid, loc_tier, clean_location = classify_location(raw_location, fallback_text=desc)
         if not loc_valid:
             skip_counts["location_excluded"] += 1
             print(f"[DEBUG] Rejected (Location outside target cities: '{clean_location}'): '{title}' @ {company}")
             continue
 
-        # Salary Extraction / Estimation via Gemini
+        # Salary Extraction / Estimation via Gemini 3.6 Flash
         passes_sal, salary_range = get_salary_range_and_check(
             title=title,
             company=company,
@@ -746,10 +750,9 @@ def run():
 
     print(f"[DEBUG] Total high-relevance qualified candidates: {len(qualified_jobs)}")
 
-    # Dispatch top 10 best matches per run
     dispatch_queue = qualified_jobs[:10]
-
     dispatched = 0
+
     for qualified in dispatch_queue:
         kit = generate_application_kit(qualified["title"], qualified["company"], qualified["desc"])
 
