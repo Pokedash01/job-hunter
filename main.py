@@ -9,11 +9,12 @@ from datetime import datetime
 from jobspy import scrape_jobs
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 
 # ReportLab imports for dense, professional PDF generation
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # ----------------- CREDENTIALS -----------------
@@ -22,47 +23,59 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 SEARCH_KEY = os.environ.get("SEARCH_API_KEY") or os.environ.get("SEARCH_API_KEYSEARCH_API_KEY")
 
-client = genai.Client(api_key=GEMINI_KEY)
+client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
 # ----------------- KARTIK BHATT MASTER PROFILE -----------------
 KARTIK_PROFILE = """
 Candidate: Kartik Bhatt
-Contact: kb270102@gmail.com | +91-7428062532 | Portfolio: https://kartikb.vercel.app/
-Education: Bachelor of Computer Applications, Majors: Computer Science, Maharaja Surajmal Institute | GPA: 9.3/10 (Top 1%) | Jul 2019 - Aug 2022
-Experience Summary: ~3.5+ years of cross-functional experience across KPMG and GlobalLogic driving process automation, Copilot/GenAI agents, Power Platform solutions, and operational excellence.
+Contact: kb270102@gmail.com | +91-7428062532 | LinkedIn | Portfolio: https://kartikb.vercel.app/
+Education: Maharaja Surajmal Institute | Bachelor of Computer Applications | Majors: Computer Science | GPA: 9.3/10 (Top 1%) | Jul'19 – Aug'22
+Total Work Experience: ~3.5+ years (3 years 2 months recorded)
 
 Work Experience:
-1. KPMG | Analyst | Knowledge Management | Gurugram (May 2024 - Present)
-Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management and played a key role in business development.
+1. KPMG | Analyst | Knowledge Management | Gurugram (May'24 – Present)
+Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management & played key role in business development.
 Key Projects:
-- Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.
+- Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI dashboards) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.
 - Built end-to-end solution to facilitate migration of old Excel-based data collection for 45+ pillars to automated SPO list integration, including 3 Power Automate flows for alerts, change management, data migration, and permission governance.
-- Built & managed multiple VBA macro solutions refreshing a repository of 30,000+ assets globally, including change management, saving 485 hrs annually.
+- Built and managed multiple VBA macros solutions refreshing a repository of 30,000+ assets globally, including change management, saving 485 hrs annually.
 - Architected a multi-modal Copilot agent to assist with messy data, draft fields, and apply metadata tags based on source and guidelines, saving 325 hrs annually.
 
 Business Development & Operations:
 - Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.
-- Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages per brand values and standards.
+- Handled 100+ RFP and RFI requests and built/maintained 100+ internal site pages per brand values and standards.
 - Undertook complete contact management system administration for 10,000+ KGS members.
 - Uploaded 5,000+ content assets across 3 content types and 15 libraries.
 - Performed Audit Market Share (AMS) analysis for 6+ sectors.
-- Catered to 50+ SharePoint governance and administration requests, including term store management, change management, metadata management, and permission-level management.
+- Catered to 50+ SharePoint governance and administration requests (term store management, change management, metadata management, permission level governance).
 
-Awards: KUDOS (efficiency & Lean Six Sigma, saving 2,000+ hrs annually), KUDOS (migrating legacy VBA/Excel practices to GenAI-focused agent + Power Platform workflows), Super Team Award (hosting/organizing employee council events), Ally of Inclusion, Gurus@Work (contributions to learning culture).
+Awards & Recognitions:
+- Awarded 'KUDOS' for displaying exceptional efficiency and applying lean six sigma methodology saving 2,000+ hrs annually.
+- Awarded 'KUDOS' for migrating legacy practices using VBA and Excel to more GenAI focused using agents and Power Platform.
+- Earned 'Super Team' award for hosting/organizing employee council events.
+- Received 'Ally of Inclusion' accolade and 'Gurus@Work' for contributions to firm learning culture.
 
-2. GlobalLogic Technologies Private Limited | Associate Analyst | Content Engineering | Gurugram (Sep 2022 - Oct 2023)
-Took part in content generation and manipulation projects for clients including Google.
-- Created best practices, process docs, and QA processes for a Google project to build test & training datasets for GenAI screen search on Android.
-- Piloted a project to extract relevant answers from multi-level docs to build a training dataset for AI.
+2. GlobalLogic Technologies Private Limited | Associate Analyst | Content Engineering | Gurugram (Sep'22 – Oct'23)
+Participated in content generation and manipulation projects for clients including Google.
+Key Projects:
+- Created best practices, process docs, and QA processes for Google GenAI training datasets for Android screen search.
+- Piloted project to extract relevant answers from multi-level docs to build training datasets for AI.
+Business Development & Operations:
 - Designed and implemented QA processes for data entry, reducing errors by 25% and improving data accuracy.
 - Managed process documentation for 10+ projects, ensuring compliance and accessibility for stakeholders.
-- Improved onshore project delivery quality from 74% to 95%; QA'd 500+ pieces weekly and led 3 pilot projects, securing all of them against competition from major MNCs.
+- Connected with onshore stakeholders and improved delivery quality from 74% to 95%.
+- QA'd 500+ pieces on a weekly basis and led 3 pilot projects to completion against major MNC competition.
 
-Skills: Microsoft Copilot / GenAI Agents, Copilot Studio, Power Apps, Power Automate, Power BI, SharePoint Online, MS Excel/VBA, SQL, MySQL, Python, Process Automation, Stakeholder Management, Product/Data Analytics, RFP/RFI Management, Change Management, Digital Transformation.
-Certifications: Microsoft Certified: Azure AI Fundamentals (AI-901), Microsoft Certified: AI Transformation Leader (AB-731), Microsoft Certified: AI Business Professional (AB-730), Lean Six Sigma: Yellow Belt, Oracle: Agentic AI Certified Foundations Associate.
+Skills: MS Excel, Copilot GenAI (Agents), Power Automate, Power BI, SharePoint Online, Power Apps, Copilot Studio, SQL, Python, Process Automation, Stakeholder Management, RFP/RFI Bidding.
+Certifications:
+- Microsoft Certified: Azure AI Fundamentals (AI-901)
+- Microsoft Certified: AI Transformation Leader (AB-731)
+- Microsoft Certified: AI Business Professional (AB-730)
+- Lean Six Sigma: Yellow Belt
+- Oracle: Agentic AI Certified Foundations Associate
 """
 
-# ----------------- STRICT SKILL-BASED FILTERING -----------------
+# ----------------- STRICT FILTERING CONFIG -----------------
 SENIORITY_BLACKLIST = [
     r"\bsenior manager\b", r"\bprincipal\b", r"\bdirector\b", r"\bvp\b",
     r"\bhead of\b", r"\bgroup product manager\b", r"\btech lead\b",
@@ -92,7 +105,6 @@ EXCLUDED_DOMAINS = [
     "surveyor", "field data", "manufacturing operating", "master data management"
 ]
 
-# ----------------- LOCATION HANDLING -----------------
 LOCATIONS_TIER_1 = [
     r"\bdelhi\b", r"\bnew delhi\b", r"\bncr\b", r"\bgurgaon\b", r"\bgurugram\b",
     r"\bnoida\b", r"\bfaridabad\b", r"\bghaziabad\b",
@@ -134,6 +146,23 @@ LOG_FILE = "job_log.csv"
 def github_raw_link(local_path: str) -> str:
     clean_path = local_path.replace(os.sep, "/").lstrip("./")
     return f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{clean_path}"
+
+
+# ----------------- TELEGRAM SYSTEM ALERTS -----------------
+def send_telegram_system_alert(service_name: str, error_detail: str):
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        return
+    text = (
+        f"🚨 <b>SYSTEM NOTIFICATION: Token / Quota Alert</b>\n\n"
+        f"<b>Target Service:</b> {service_name}\n"
+        f"<b>Details:</b> <code>{str(error_detail)[:450]}</code>\n\n"
+        f"⚠️ <i>Please renew tokens or update API secrets to resume uninterrupted execution.</i>"
+    )
+    endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    try:
+        requests.post(endpoint, data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=10)
+    except Exception as e:
+        print(f"Failed to deliver system alert to Telegram: {e}")
 
 
 # ----------------- STORAGE ENGINE -----------------
@@ -199,7 +228,7 @@ def append_to_log(title, company, salary_range, fit_score, location, resume_link
         print(f"job_log.csv logging error: {e}")
 
 
-# ----------------- SMART SCREENER & FILTERS -----------------
+# ----------------- SCREENERS & FILTERS -----------------
 def is_seniority_excluded(title: str) -> bool:
     t = title.lower()
     return any(re.search(pat, t) for pat in SENIORITY_BLACKLIST)
@@ -224,20 +253,7 @@ def is_role_and_skill_relevant(title: str, description: str) -> bool:
     return matched_skills >= 2
 
 
-def extract_min_experience(text: str):
-    patterns = [
-        r"(\d+)\s*(?:-|to|\+)\s*(?:\d+)?\s*(?:years|yrs)",
-        r"(?:minimum|at least|over|requires?)\s*(\d+)\s*(?:years|yrs)"
-    ]
-    years = []
-    for pat in patterns:
-        for m in re.finditer(pat, text, flags=re.IGNORECASE):
-            years.append(int(m.group(1)))
-    return min(years) if years else None
-
-
 def extract_clean_location(text_to_search: str) -> str:
-    """Scans text for canonical target locations or remote designations, never returning raw sentences."""
     loc = str(text_to_search).lower()
     matched = []
     for pattern, name in LOCATION_CANONICAL:
@@ -251,13 +267,11 @@ def extract_clean_location(text_to_search: str) -> str:
 
 
 def classify_location(location_str: str, fallback_text: str = ""):
-    """Classifies tier internally and returns (is_valid, tier_label, clean_location)."""
     clean = extract_clean_location(location_str)
     if clean == "Unspecified" and fallback_text:
         clean = extract_clean_location(fallback_text)
 
     loc = clean.lower()
-
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_1):
         return True, "Tier 1", clean
     if any(re.search(pat, loc) for pat in LOCATIONS_TIER_2):
@@ -268,7 +282,7 @@ def classify_location(location_str: str, fallback_text: str = ""):
     return False, "Excluded", clean
 
 
-# ----------------- GEMINI COMPENSATION ANALYZER -----------------
+# ----------------- COMPENSATION ANALYZER -----------------
 def get_salary_range_and_check(title: str, company: str, location: str, description: str, tier: str, min_sal=None, max_sal=None):
     min_floor = 1000000 if "Tier 1" in tier else 1400000
 
@@ -286,14 +300,13 @@ Analyze the expected total annual CTC (in INR / LPA) for this role given Kartik 
 Job Title: {title}
 Company: {company}
 Location: {location}
-Job Description: {description[:2500]}
+Job Description: {description[:2200]}
 
-Rules:
-1. If the job description lists compensation, extract it directly.
-2. Otherwise, estimate a realistic CTC range based on the company tier, candidate's ~3.5 YOE, and specific role complexity.
-3. Determine `passes_floor`: true if max_inr >= {min_floor}, false otherwise.
+Determine:
+1. Realistic min and max CTC range in INR.
+2. `passes_floor`: true if max_inr >= {min_floor}, false otherwise.
 
-Return ONLY a valid JSON object matching this schema:
+Return ONLY a valid JSON object matching:
 {{
   "min_inr": 1300000,
   "max_inr": 1850000,
@@ -303,7 +316,7 @@ Return ONLY a valid JSON object matching this schema:
 """
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -311,12 +324,16 @@ Return ONLY a valid JSON object matching this schema:
         if not data.get("passes_floor", True):
             return False, ""
         return True, data.get("display_range", "₹12 - ₹16 LPA (Est.)")
+    except APIError as e:
+        if "RESOURCE_EXHAUSTED" in str(e) or e.code == 429:
+            send_telegram_system_alert("Gemini API", f"Compensation Check Rate Limited / Exhausted: {e}")
+        return True, "₹12 - ₹16 LPA (Est.)"
     except Exception as e:
-        print(f"Salary check error for {title} @ {company}: {e}")
+        print(f"Salary check notice for {title} @ {company}: {e}")
         return True, "₹12 - ₹16 LPA (Est.)"
 
 
-# ----------------- DIRECT ATS & COMPANY PORTAL SEARCH -----------------
+# ----------------- PORTAL SEARCH & SCRAPING -----------------
 def extract_company_from_url(url: str) -> str:
     try:
         domain = urlparse(url).netloc.lower()
@@ -374,8 +391,13 @@ def search_enterprise_ats_jobs():
                 "num": 25,
                 "time_period": "last_week"
             }
-            res = requests.get(url, params=params, timeout=12).json()
-            for item in res.get("organic_results", []):
+            res = requests.get(url, params=params, timeout=12)
+            if res.status_code in [401, 402, 429]:
+                send_telegram_system_alert("SearchAPI.io", f"HTTP {res.status_code}: Exhausted credits or unauthorized.")
+                break
+
+            data = res.json()
+            for item in data.get("organic_results", []):
                 link = item.get("link", "")
                 raw_title = item.get("title", "")
                 snippet = item.get("snippet", "")
@@ -386,7 +408,6 @@ def search_enterprise_ats_jobs():
                     flags=re.IGNORECASE
                 ).strip()
                 company = extract_company_from_url(link)
-
                 inferred_loc = extract_clean_location(snippet)
                 if inferred_loc == "Unspecified":
                     inferred_loc = "India"
@@ -403,229 +424,337 @@ def search_enterprise_ats_jobs():
                         "is_direct_ats": True
                     })
         except Exception as e:
-            print(f"ATS search error: {e}")
+            print(f"ATS search notice: {e}")
 
     return discovered
 
 
-# ----------------- GEMINI ASSET GENERATION -----------------
+# ----------------- ACCURATE MATCHING & RESUME ALIGNMENT -----------------
 def generate_application_kit(title, company, description):
     prompt = f"""
-You are an expert executive resume writer and ATS optimization specialist tailoring documents for Kartik Bhatt (~3.5 years of experience).
+You are an expert executive tech recruiter evaluating a candidate for a technical role.
 
-Candidate Ground Truth:
+CANDIDATE GROUND TRUTH:
 {KARTIK_PROFILE}
 
-Target Job Opening:
-Title: {title}
+TARGET JOB DETAILS:
+Role: {title}
 Company: {company}
-JD Snippet: {description[:2200]}
+JD: {description[:2800]}
 
-CRITICAL RULES:
-1. RESUME SUMMARY: Dense, 3-4 sentence executive summary highlighting Kartik's process automation, Copilot/GenAI agents, Power Platform, and analytics background. DO NOT mention {company} in the summary.
-2. ATS KEYWORDS: 10-14 exact matching technical & domain keywords backed by Kartik's background.
-3. QUANTIFIED BULLETS: Keep KPMG and GlobalLogic bullets dense, factual, and metric-driven.
-4. COVER LETTER: Reference {company} and {title}, articulating why Kartik is a strong fit.
+STRICT EVALUATION GUIDELINES:
+1. EXPERIENCE DETECTION:
+   - Identify the exact minimum years of experience required from the JD. If open/unspecified, state 'Not specified (Estimated 2-4 Years)'.
+   - Determine `exceeds_cap`: true if required experience > 5.5 years, false otherwise.
+2. ACCURATE SKILL GAPS:
+   - Carefully identify distinct tools/skills demanded by the JD that Kartik does NOT have in his ground truth (e.g. AWS, Snowflake, Tableau, BigQuery, Kafka, Jira).
+   - If Kartik covers all core requirements, state 'None detected'.
+3. CALIBRATED FIT SCORE:
+   - Score objectively between 0% and 100% comparing his genuine 3.5 YOE stack (Power Platform, Copilot Studio, SQL, Python, Excel/VBA) against the JD.
+4. INTELLIGENT RESUME BULLET ALIGNMENT (DO NOT LIE):
+   - Adapt the terminology in Kartik's bullets to match the JD's stack without altering facts or numbers.
+   - Example 1: If JD focuses on ServiceNow, Jira, or SQL tables instead of SharePoint, rephrase SPO list migration to 'structured data repository migration and list integration (SPO/Enterprise tables)'.
+   - Example 2: If JD asks for Automation Scripting over VBA, phrase VBA macros as 'automated VBA/macro scripting and tabular data engines'.
+   - Keep ALL numbers exact: 20,000 reach outs, 30+ member firms, 1,200 hrs saved, 45+ pillars, 30,000+ assets, 485 hrs saved, 325 hrs saved, 2,000+ hrs saved, 25% QA improvement, 74% to 95% quality.
 
 Return ONLY a valid JSON object matching this schema:
 {{
-"match_score": "e.g., 94%",
-"reason": "1-2 sentences on why Kartik's exact tech stack fits this role.",
-"skills_gap": "Any missing tool/skill or 'None'",
-"ats_keywords": ["10-14 exact keywords"],
-"tailored_summary": "Executive summary...",
-"kpmg_project_bullets": [
-    "Quantified bullet on Power Platform solution: 20,000 reach outs, 30+ member firms, 13 sectors, 1,200 hrs saved",
-    "Quantified bullet on SPO migration: 45+ pillars, 3 Power Automate flows, change management",
-    "Quantified bullet on VBA macro repository: 30,000+ assets, 485 hrs saved",
-    "Quantified bullet on multi-modal Copilot agent: messy data cleanup, field drafting, metadata tagging, 325 hrs saved",
-    "Quantified bullet on contact management administration for 10,000+ members and 5,000+ assets"
-],
-"kpmg_bd_bullets": [
-    "Saved 2,000+ hrs annually leveraging Power Platform, Copilot Studio, and VBA Macros.",
-    "Handled 100+ RFP/RFI requests and built/maintained 100+ internal site pages aligned with brand guidelines.",
-    "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
-    "Catered to 50+ SharePoint governance and administration requests."
-],
-"globallogic_bullets": [
-    "Designed best practices, process docs, and QA workflows for Google GenAI Android search datasets.",
-    "Designed and implemented QA processes for data entry, reducing errors by 25%.",
-    "Managed process documentation across 10+ engagements, lifting delivery quality from 74% to 95%.",
-    "QA'd 500+ pieces weekly and led 3 pilot projects to completion against major MNC competition."
-],
-"cover_letter_subject": "Subject: Driving Operational Excellence & Scalable Solutions as {title}",
-"cover_letter_paragraphs": [
-    "Opening paragraph: enthusiasm for {title} at {company}, JD hook, and 1-line summary of 3.5+ year background.",
-    "Second paragraph: 2-3 concrete KPMG achievements mapped directly to the JD requirements.",
-    "Third paragraph: GlobalLogic experience mapped to relevant JD requirements.",
-    "Closing paragraph: connecting skills to {company}'s goals, restating enthusiasm, thanking reader, inviting next steps."
-]
+  "detected_experience": "e.g., 3+ Years",
+  "min_years_numeric": 3.0,
+  "exceeds_cap": false,
+  "match_score": "e.g., 92%",
+  "skills_gap": "e.g., Snowflake, Tableau",
+  "reason": "1-2 sharp sentences explaining fit and overlap.",
+  "kpmg_project_bullets": [
+    "Adapted bullet on Power Platform: 20,000 reach outs, 30+ member firms, 1,200 hrs saved",
+    "Adapted bullet on data collection migration: 45+ pillars, 3 Power Automate flows, permission governance",
+    "Adapted bullet on macro/scripting automation: 30,000+ assets globally, 485 hrs saved",
+    "Adapted bullet on multi-modal Copilot agent: messy data cleanup, field drafting, metadata tagging, 325 hrs saved"
+  ],
+  "kpmg_bd_bullets": [
+    "Saved 2,000+ hrs annually using Power Platform, Copilot Studio, and VBA Macros.",
+    "Catered to 100+ RFP and RFI requests and 100+ internal site pages according to brand standards.",
+    "Undertook contact management system administration for 10,000+ members and uploaded 5,000+ content assets.",
+    "Performed Audit Market Share (AMS) for 6+ sectors and handled 50+ governance/administration requests."
+  ],
+  "globallogic_bullets": [
+    "Created best practices, process docs, and QA workflows for Google GenAI Android screen search datasets.",
+    "Piloted project to extract relevant answers from multi-level docs to build training datasets for AI.",
+    "Designed and implemented QA processes for data entry, reducing errors by 25% and improving data accuracy.",
+    "Managed documentation for 10+ projects, lifting project delivery quality from 74% to 95% with 500+ weekly QA reviews."
+  ],
+  "cover_letter_subject": "Subject: Application for {title} - Kartik Bhatt",
+  "cover_letter_paragraphs": [
+    "Targeted opening demonstrating alignment with {company} and role {title}.",
+    "KPMG achievement paragraph mapped to specific requirements in the JD.",
+    "GlobalLogic QA and AI training datasets achievement paragraph.",
+    "Closing paragraph reaffirming enthusiasm and availability."
+  ]
 }}
 """
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
         return json.loads(response.text)
+    except APIError as e:
+        if "RESOURCE_EXHAUSTED" in str(e) or e.code == 429:
+            send_telegram_system_alert("Gemini API", f"Gemini generation quota exhausted: {e}")
+        return None
     except Exception as e:
-        print(f"AI Generation error: {e}")
-        return {
-            "match_score": "88%",
-            "reason": "Strong alignment with Kartik's Power Platform, GenAI agents, and analytics background.",
-            "skills_gap": "None",
-            "ats_keywords": ["Power Platform", "Power Automate", "Power BI", "Power Apps", "Copilot Studio", "GenAI Agents", "SQL", "Process Automation"],
-            "tailored_summary": "Solutions-driven analyst with ~3.5+ years of experience across KPMG and GlobalLogic specializing in enterprise process automation, Microsoft Power Platform architectures, GenAI agent implementation, and data-driven operational optimization.",
-            "kpmg_project_bullets": [
-                "Built complete Power Platform solution (Power Automate, SharePoint lists, Power Apps, Power BI) facilitating 20,000 reach outs annually across 30+ member firms in 13 sectors, saving 1,200 hrs annually.",
-                "Built end-to-end migration of Excel-based data collection for 45+ pillars to automated SPO lists, including 3 Power Automate flows.",
-                "Built & managed VBA macro solutions refreshing 30,000+ assets globally, saving 485 hrs annually.",
-                "Architected a multi-modal Copilot agent for messy data cleanup, field drafting, and metadata tagging, saving 325 hrs annually.",
-                "Administered contact management system for 10,000+ members and uploaded 5,000+ content assets across 15 libraries."
-            ],
-            "kpmg_bd_bullets": [
-                "Saved 2,000+ hrs annually across Power Platform, Copilot Studio, and VBA Macros.",
-                "Handled 100+ RFP/RFI requests and maintained 100+ internal site pages per brand standards.",
-                "Performed Audit Market Share (AMS) analysis across 6+ sectors.",
-                "Catered to 50+ SharePoint governance and administration requests."
-            ],
-            "globallogic_bullets": [
-                "Created best practices and QA processes for a Google GenAI training dataset project for Android screen search.",
-                "Reduced data entry errors by 25% through redesigned QA processes.",
-                "Improved project delivery quality from 74% to 95%, managing process documentation for 10+ projects.",
-                "QA'd 500+ pieces weekly and led 3 pilot projects to completion against major MNC competition."
-            ],
-            "cover_letter_subject": f"Subject: Application for {title} - Kartik Bhatt",
-            "cover_letter_paragraphs": [
-                f"I am excited to apply for the {title} position at {company}. With over 3.5 years of experience at KPMG and GlobalLogic, I specialize in process automation, Power Platform ecosystems, and Copilot AI agents.",
-                "At KPMG, I built a complete Power Platform solution driving 20,000 reach outs annually and architected automated GenAI workflows.",
-                "At GlobalLogic, I engineered QA frameworks for Google's GenAI training datasets, lifting delivery quality from 74% to 95%.",
-                f"I welcome the opportunity to bring this technical expertise to {company}. Thank you for your consideration."
-            ]
-        }
+        print(f"Generation error: {e}")
+        return None
 
 
-# ----------------- DENSE PDF BUILDERS -----------------
+# ----------------- EXACT TEMPLATE RESUME BUILDER -----------------
 def create_dense_resume(filepath, kit):
-    doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=25, bottomMargin=25)
+    doc = SimpleDocTemplate(
+        filepath,
+        pagesize=letter,
+        leftMargin=28,
+        rightMargin=28,
+        topMargin=22,
+        bottomMargin=22
+    )
     styles = getSampleStyleSheet()
     story = []
 
-    name_style = ParagraphStyle('Name', parent=styles['Heading1'], fontSize=16, leading=18, textColor=colors.HexColor("#0F2942"), alignment=1)
-    contact_style = ParagraphStyle('Contact', parent=styles['Normal'], fontSize=8.5, leading=11, alignment=1, textColor=colors.HexColor("#334155"))
-    section_style = ParagraphStyle('SecHeader', parent=styles['Heading2'], fontSize=10, leading=12, textColor=colors.HexColor("#0F2942"), spaceBefore=4, spaceAfter=1)
-    body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor("#1E293B"))
-    company_style = ParagraphStyle('Comp', parent=styles['Normal'], fontSize=9, leading=11.5, fontName='Helvetica-Bold', textColor=colors.HexColor("#0F2942"))
-    subhead_style = ParagraphStyle('SubHead', parent=styles['Normal'], fontSize=8.5, leading=10.5, fontName='Helvetica-Bold', textColor=colors.HexColor("#334155"), leftIndent=6)
-    bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'], fontSize=8, leading=10.5, leftIndent=12, textColor=colors.HexColor("#1E293B"))
+    DARK_NAVY = colors.HexColor("#0A2540")
+    TEXT_CHARCOAL = colors.HexColor("#1A202C")
+    MUTED_GRAY = colors.HexColor("#4A5568")
+    BORDER_GRAY = colors.HexColor("#CBD5E1")
 
-    story.append(Paragraph("<b>KARTIK BHATT</b>", name_style))
-    story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | LinkedIn | Website: https://kartikb.vercel.app/ | Delhi NCR, India", contact_style))
+    name_style = ParagraphStyle('HeaderName', fontSize=13, leading=15, fontName='Helvetica-Bold', textColor=DARK_NAVY)
+    contact_style = ParagraphStyle('HeaderContact', fontSize=7.5, leading=10.5, fontName='Helvetica', textColor=MUTED_GRAY, alignment=2)
+    section_head_style = ParagraphStyle('SectionHead', fontSize=9, leading=11, fontName='Helvetica-Bold', textColor=DARK_NAVY, spaceBefore=4, spaceAfter=1)
+    left_bold_style = ParagraphStyle('LeftBold', fontSize=8, leading=10.5, fontName='Helvetica-Bold', textColor=TEXT_CHARCOAL)
+    right_date_style = ParagraphStyle('RightDate', fontSize=8, leading=10.5, fontName='Helvetica-Bold', textColor=MUTED_GRAY, alignment=2)
+    body_style = ParagraphStyle('BodyText', fontSize=7.8, leading=10, fontName='Helvetica', textColor=TEXT_CHARCOAL)
+    role_desc_style = ParagraphStyle('RoleDesc', fontSize=7.8, leading=9.8, fontName='Helvetica-Oblique', textColor=TEXT_CHARCOAL, spaceAfter=1)
+    subhead_style = ParagraphStyle('SubCategoryHead', fontSize=8, leading=10, fontName='Helvetica-Bold', textColor=DARK_NAVY, spaceBefore=2, spaceAfter=1)
+    bullet_style = ParagraphStyle('CompactBullet', fontSize=7.5, leading=9.5, fontName='Helvetica', textColor=TEXT_CHARCOAL, leftIndent=8, spaceAfter=1)
+    grid_cell_style = ParagraphStyle('GridCell', fontSize=7.8, leading=10, fontName='Helvetica', textColor=TEXT_CHARCOAL)
+
+    # 1. TOP HEADER
+    header_table = Table([
+        [
+            Paragraph("KARTIK BHATT", name_style),
+            Paragraph("kb270102@gmail.com | +91-7428062532 | <a href='https://kartikb.vercel.app/'><u>Portfolio</u></a> | Delhi NCR, India", contact_style)
+        ]
+    ], colWidths=[200, 356])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2)
+    ]))
+    story.append(header_table)
+    story.append(HRFlowable(width="100%", thickness=1, color=DARK_NAVY, spaceBefore=2, spaceAfter=4))
+
+    # 2. EDUCATION
+    story.append(Paragraph("EDUCATION", section_head_style))
+    edu_table = Table([
+        [
+            Paragraph("<b>Maharaja Surajmal Institute</b> | Bachelor of Computer Applications | Majors: Computer Science | <b>GPA: 9.3/10 (Top 1%)</b>", body_style),
+            Paragraph("Jul’19 – Aug’22", right_date_style)
+        ]
+    ], colWidths=[460, 96])
+    edu_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0)
+    ]))
+    story.append(edu_table)
     story.append(Spacer(1, 3))
-    story.append(HRFlowable(width="100%", thickness=0.75, color=colors.HexColor("#94A3B8"), spaceAfter=3))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER_GRAY, spaceBefore=1, spaceAfter=3))
 
-    story.append(Paragraph("<b>PROFESSIONAL SUMMARY</b>", section_style))
-    story.append(Paragraph(kit.get("tailored_summary", ""), body_style))
-    story.append(Spacer(1, 3))
+    # 3. WORK EXPERIENCE
+    exp_header_table = Table([
+        [
+            Paragraph("WORK EXPERIENCE", section_head_style),
+            Paragraph("3 years 2 months", right_date_style)
+        ]
+    ], colWidths=[430, 126])
+    exp_header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0)
+    ]))
+    story.append(exp_header_table)
 
-    ats_keywords = kit.get("ats_keywords", [])
-    if ats_keywords:
-        story.append(Paragraph("<b>CORE COMPETENCIES & KEYWORDS</b>", section_style))
-        story.append(Paragraph(" • ".join(ats_keywords), body_style))
-        story.append(Spacer(1, 3))
+    # KPMG Block
+    kpmg_title_table = Table([
+        [
+            Paragraph("<b>KPMG</b> | Analyst | Knowledge Management | Gurugram", left_bold_style),
+            Paragraph("May’24 – Present", right_date_style)
+        ]
+    ], colWidths=[440, 116])
+    kpmg_title_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0)
+    ]))
+    story.append(kpmg_title_table)
+    story.append(Paragraph("Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management & played key role in business development.", role_desc_style))
 
-    story.append(Paragraph("<b>EDUCATION</b>", section_style))
-    story.append(Paragraph("<b>Maharaja Surajmal Institute</b> | Bachelor of Computer Applications (Computer Science) | <b>GPA: 9.3/10 (Top 1%)</b>", body_style))
-    story.append(Spacer(1, 3))
-
-    story.append(Paragraph("<b>WORK EXPERIENCE</b>", section_style))
-    story.append(Paragraph("<b>KPMG</b> | Analyst — Knowledge Management | Gurugram <i>(May 2024 – Present | ~3.5+ yrs total exp)</i>", company_style))
-    story.append(Paragraph("<i>Led cross-functional projects across 13 sectors demanding 360-degree stakeholder management & business development.</i>", body_style))
     story.append(Paragraph("Key Projects", subhead_style))
     for b in kit.get("kpmg_project_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
+
     story.append(Paragraph("Business Development & Operations", subhead_style))
     for b in kit.get("kpmg_bd_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
-    story.append(Paragraph("Key Achievements: Awarded 'KUDOS' twice — for Lean Six Sigma efficiency (2,000+ hrs saved) and for migrating legacy VBA/Excel practices to GenAI agents & Power Platform — plus 'Super Team', 'Ally of Inclusion', and 'Gurus@Work'.", bullet_style))
-    story.append(Spacer(1, 3))
 
-    story.append(Paragraph("<b>GlobalLogic Technologies Private Limited</b> | Associate Analyst — Content Engineering | Gurugram <i>(Sep 2022 – Oct 2023)</i>", company_style))
+    story.append(Paragraph("Key Achievements & Recognitions", subhead_style))
+    story.append(Paragraph("• Awarded 'KUDOS' twice: for Lean Six Sigma efficiency (2,000+ hrs saved) and migrating legacy Excel/VBA to GenAI agents + Power Platform.", bullet_style))
+    story.append(Paragraph("• Honored with 'Super Team' (council leadership), 'Ally of Inclusion' (advocate), and 'Gurus@Work' (firmwide learning).", bullet_style))
+    story.append(Spacer(1, 2))
+
+    # GlobalLogic Block
+    gl_title_table = Table([
+        [
+            Paragraph("<b>GlobalLogic Technologies Private Limited</b> | Associate Analyst | Content Engineering | Gurugram", left_bold_style),
+            Paragraph("Sep’22 – Oct’23", right_date_style)
+        ]
+    ], colWidths=[440, 116])
+    gl_title_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0)
+    ]))
+    story.append(gl_title_table)
+    story.append(Paragraph("Participated in content generation and manipulation workflows for Tier-1 clients including Google.", role_desc_style))
+
+    story.append(Paragraph("Key Deliverables & QA Engineering", subhead_style))
     for b in kit.get("globallogic_bullets", []):
         story.append(Paragraph(f"• {b}", bullet_style))
-    story.append(Spacer(1, 3))
 
-    story.append(Paragraph("<b>SKILLS & CERTIFICATIONS</b>", section_style))
-    story.append(Paragraph("<b>Technical Stack:</b> Microsoft Copilot Studio, Power Automate, Power Apps, Power BI, SharePoint Online, Python, SQL, MySQL, Advanced Excel/VBA, Process Mining, API Integrations", body_style))
-    story.append(Paragraph("<b>Domain & Operations:</b> Process Automation, Digital Transformation, Stakeholder Management, Product Analytics, RFP/RFI Bidding, Change Management, Data Governance", body_style))
-    story.append(Paragraph("<b>Certifications:</b> Microsoft Certified: Azure AI Fundamentals (AI-901) | Microsoft Certified: AI Transformation Leader (AB-731) | Microsoft Certified: AI Business Professional (AB-730) | Lean Six Sigma: Yellow Belt | Oracle: Agentic AI Certified Foundations Associate", body_style))
+    story.append(Spacer(1, 2))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER_GRAY, spaceBefore=1, spaceAfter=3))
+
+    # 4. SKILLS SECTION (4-Column Balanced Grid matching template)
+    story.append(Paragraph("SKILLS", section_head_style))
+    skills_data = [
+        [
+            Paragraph("MS Excel", grid_cell_style),
+            Paragraph("| Copilot GenAI (Agents)", grid_cell_style),
+            Paragraph("| Power Automate", grid_cell_style),
+            Paragraph("| Power BI", grid_cell_style)
+        ],
+        [
+            Paragraph("SharePoint Online", grid_cell_style),
+            Paragraph("| Power Apps", grid_cell_style),
+            Paragraph("| Copilot Studio", grid_cell_style),
+            Paragraph("| SQL & Python", grid_cell_style)
+        ]
+    ]
+    skills_table = Table(skills_data, colWidths=[135, 145, 135, 141])
+    skills_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1)
+    ]))
+    story.append(skills_table)
+    story.append(Spacer(1, 2))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER_GRAY, spaceBefore=1, spaceAfter=3))
+
+    # 5. CERTIFICATIONS SECTION (2-Column Grid matching template)
+    story.append(Paragraph("CERTIFICATIONS", section_head_style))
+    certs_data = [
+        [
+            Paragraph("Microsoft Certified: Azure AI Fundamentals (AI-901)", grid_cell_style),
+            Paragraph("| Microsoft Certified: AI Transformation Leader (AB-731)", grid_cell_style)
+        ],
+        [
+            Paragraph("Lean Six Sigma: Yellow Belt", grid_cell_style),
+            Paragraph("| Microsoft Certified: AI Business Professional (AB-730)", grid_cell_style)
+        ],
+        [
+            Paragraph("Oracle: Agentic AI Certified Foundations Associate", grid_cell_style),
+            Paragraph("", grid_cell_style)
+        ]
+    ]
+    certs_table = Table(certs_data, colWidths=[280, 276])
+    certs_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1)
+    ]))
+    story.append(certs_table)
 
     doc.build(story)
 
 
+# ----------------- COVER LETTER BUILDER -----------------
 def create_dense_cover_letter(filepath, title, company, kit):
-    doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=45, rightMargin=45, topMargin=40, bottomMargin=40)
+    doc = SimpleDocTemplate(filepath, pagesize=letter, leftMargin=40, rightMargin=40, topMargin=35, bottomMargin=35)
     styles = getSampleStyleSheet()
     story = []
 
-    name_style = ParagraphStyle('Name', parent=styles['Heading1'], fontSize=16, leading=18, textColor=colors.HexColor("#0F2942"))
-    contact_style = ParagraphStyle('Contact', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor("#4A5568"))
-    subj_style = ParagraphStyle('Subj', parent=styles['Normal'], fontSize=10, leading=13, fontName='Helvetica-Bold', textColor=colors.HexColor("#0F2942"), spaceBefore=6, spaceAfter=6)
-    body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=9.5, leading=14, spaceBefore=6, textColor=colors.HexColor("#1E293B"))
+    NAVY = colors.HexColor("#0B2540")
+    body_style = ParagraphStyle('CLBody', fontSize=9, leading=13.5, fontName='Helvetica', textColor=colors.HexColor("#1E293B"), spaceBefore=5)
+    header_style = ParagraphStyle('CLHead', fontSize=14, leading=16, fontName='Helvetica-Bold', textColor=NAVY)
+    sub_style = ParagraphStyle('CLSub', fontSize=8.5, leading=11, fontName='Helvetica', textColor=colors.HexColor("#475569"))
+    subj_style = ParagraphStyle('CLSubj', fontSize=9.5, leading=12, fontName='Helvetica-Bold', textColor=NAVY, spaceBefore=4, spaceAfter=4)
 
-    story.append(Paragraph("<b>KARTIK BHATT</b>", name_style))
-    story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | LinkedIn | Portfolio: https://kartikb.vercel.app/", contact_style))
-    story.append(Spacer(1, 4))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#CBD5E0"), spaceAfter=8))
+    story.append(Paragraph("KARTIK BHATT", header_style))
+    story.append(Paragraph("kb270102@gmail.com | +91-7428062532 | Delhi NCR | kartikb.vercel.app", sub_style))
+    story.append(Spacer(1, 3))
+    story.append(HRFlowable(width="100%", thickness=1, color=NAVY, spaceAfter=6))
 
     story.append(Paragraph(f"<b>Date:</b> {datetime.now().strftime('%B %d, %Y')}", body_style))
-    story.append(Paragraph(f"<b>Target Role:</b> {title}", body_style))
-    story.append(Paragraph(f"<b>Company:</b> {company}", body_style))
+    story.append(Paragraph(f"<b>Target Role:</b> {title} | <b>Company:</b> {company}", body_style))
     story.append(Spacer(1, 4))
+    story.append(Paragraph(kit.get("cover_letter_subject", f"Subject: Application for {title}"), subj_style))
+    story.append(Paragraph("Dear Hiring Team,", body_style))
 
-    story.append(Paragraph(f"<b>{kit.get('cover_letter_subject', 'Subject: Application for ' + title)}</b>", subj_style))
-    story.append(Paragraph("Dear Hiring Manager,", body_style))
     for p in kit.get("cover_letter_paragraphs", []):
         story.append(Paragraph(p, body_style))
-    story.append(Spacer(1, 8))
-    story.append(Paragraph("Sincerely,<br/><b>Kartik Bhatt</b>", body_style))
 
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("Warm regards,<br/><b>Kartik Bhatt</b>", body_style))
     doc.build(story)
 
 
-# ----------------- TELEGRAM DISPATCHER -----------------
-def send_telegram_alert(title, company, location, exp_detected, url, salary_range, kit, resume_link, cl_link):
-    safe_title = title.replace("*", "").replace("_", " ")
-    safe_company = company.replace("*", "").replace("_", " ")
-    safe_location = location.replace("*", "").replace("_", " ")
+# ----------------- TELEGRAM CARD DISPATCHER -----------------
+def send_telegram_alert(title, company, location, exp_detected, salary_range, kit, resume_link, cl_link, job_url):
+    fit = kit.get("match_score", "N/A")
+    gaps = kit.get("skills_gap", "None")
 
-    message_text = (
-        f"🎯 *New High-Fit Role Matched for Kartik!*\n\n"
-        f"📌 *Role:* {safe_title}\n"
-        f"🏢 *Company:* {safe_company}\n"
-        f"📍 *Location:* {safe_location}\n"
-        f"⏳ *Experience Required:* {exp_detected}\n"
-        f"💰 *Salary Range:* {salary_range}\n"
-        f"📊 *Fit Score:* {kit.get('match_score')}\n"
-        f"⚠️ *Skill Gap:* {kit.get('skills_gap')}\n\n"
-        f"🔗 [Apply Directly on Portal]({url})\n"
-        f"📄 [Download Resume PDF]({resume_link})\n"
-        f"📝 [Download Cover Letter PDF]({cl_link})\n\n"
-        f"_Links go live within ~1 min once pushed to repo._"
+    msg = (
+        f"🎯 <b>NEW HIGH-FIT OPPORTUNITY</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💼 <b>Role:</b> {title}\n"
+        f"🏢 <b>Company:</b> {company}\n"
+        f"📍 <b>Location:</b> {location}\n"
+        f"⏳ <b>Exp. Demanded:</b> {exp_detected}\n"
+        f"💰 <b>Est. CTC:</b> {salary_range}\n"
+        f"📊 <b>ATS Fit Score:</b> <code>{fit}</code>\n"
+        f"⚠️ <b>Skill Gaps:</b> {gaps}\n\n"
+        f"💡 <b>Match Alignment:</b>\n<i>{kit.get('reason', '')}</i>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📄 <a href='{resume_link}'><b>Download Tailored Resume (PDF)</b></a>\n"
+        f"📝 <a href='{cl_link}'><b>Download Cover Letter (PDF)</b></a>\n"
+        f"🔗 <a href='{job_url}'><b>Apply Directly on Portal</b></a>\n\n"
+        f"<i>Note: PDF links go live shortly once pushed to GitHub repo.</i>"
     )
 
     endpoint = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        data = {
+        res = requests.post(endpoint, data={
             "chat_id": CHAT_ID,
-            "text": message_text[:4096],
-            "parse_mode": "Markdown",
+            "text": msg,
+            "parse_mode": "HTML",
             "disable_web_page_preview": True
-        }
-        res = requests.post(endpoint, data=data)
+        }, timeout=10)
         if res.status_code != 200:
-            print(f"Telegram message warning: {res.text}")
+            print(f"Telegram dispatch returned {res.status_code}: {res.text}")
     except Exception as e:
         print(f"Telegram dispatch error: {e}")
 
@@ -633,16 +762,15 @@ def send_telegram_alert(title, company, location, exp_detected, url, salary_rang
 # ----------------- MAIN PIPELINE -----------------
 def run():
     init_tracker()
-
     all_jobs = []
 
-    # 1. Scrape standard job boards (LinkedIn)
+    # 1. Scrape standard job boards
     try:
         board_jobs = scrape_jobs(
             site_name=["linkedin"],
-            search_term='"Power Platform" OR "Copilot Studio" OR "Power Automate" OR "Business Analyst" OR "Data Analyst"',
+            search_term='"Power Platform" OR "Copilot" OR "Power Automate" OR "Business Analyst" OR "Data Analyst"',
             location="India",
-            results_wanted=40,
+            results_wanted=35,
             hours_old=48,
             country_indeed='india'
         )
@@ -650,111 +778,71 @@ def run():
             job_dict = row.to_dict()
             job_dict["is_direct_ats"] = False
             all_jobs.append(job_dict)
-        print(f"[DEBUG] Job boards returned {len(board_jobs)} raw listings.")
+        print(f"[DEBUG] Job boards returned {len(board_jobs)} listings.")
     except Exception as e:
-        print(f"[DEBUG] Scraper error: {e}")
+        print(f"[DEBUG] Board scraper warning: {e}")
 
-    # 2. Add Direct ATS & Company Portal Hits
+    # 2. Scrape direct enterprise ATS portals
     ats_jobs = search_enterprise_ats_jobs()
-    print(f"[DEBUG] Direct Enterprise ATS search returned {len(ats_jobs)} raw portal listings.")
+    print(f"[DEBUG] Enterprise ATS returned {len(ats_jobs)} listings.")
     all_jobs.extend(ats_jobs)
 
-    print(f"[DEBUG] Total raw candidates this run: {len(all_jobs)}")
+    print(f"[DEBUG] Total raw jobs to process: {len(all_jobs)}")
 
-    skip_counts = {
-        "no_url": 0,
-        "already_seen": 0,
-        "skill_or_role_mismatch": 0,
-        "exp_too_high": 0,
-        "location_excluded": 0,
-        "salary_check": 0
-    }
-
-    qualified_jobs = []
+    dispatched = 0
 
     for job in all_jobs:
+        if dispatched >= 8:
+            break
+
         url = str(job.get('job_url') or '')
         title = str(job.get('title') or '')
         company = str(job.get('company') or '')
         raw_location = str(job.get('location') or '')
-        min_sal = job.get('min_amount')
-        max_sal = job.get('max_amount')
         desc = str(job.get('description') or '')
 
-        if not url or url == 'nan':
-            skip_counts["no_url"] += 1
+        if not url or url == 'nan' or is_seen(url):
             continue
 
-        if is_seen(url):
-            skip_counts["already_seen"] += 1
-            continue
-
-        # Fetch full ATS text if snippet is short
         if job.get("is_direct_ats") and len(desc) < 300:
             full_desc = fetch_portal_description(url)
             if full_desc:
                 desc = full_desc
 
-        full_text = f"{title} {desc}"
-
-        # Strict Role & Core Skill Stack Alignment
+        # Filter keywords and role fit
         if not is_role_and_skill_relevant(title, desc):
-            skip_counts["skill_or_role_mismatch"] += 1
             continue
 
-        # Experience Cap Filtering
-        min_exp = extract_min_experience(full_text)
-        if min_exp is not None and min_exp > MAX_EXPERIENCE_CAP:
-            skip_counts["exp_too_high"] += 1
-            print(f"[DEBUG] Rejected (Exp {min_exp}+ yrs > {MAX_EXPERIENCE_CAP}): '{title}' @ {company}")
-            continue
-
-        # Location classification and fallback to job description
+        # Location check
         loc_valid, loc_tier, clean_location = classify_location(raw_location, fallback_text=desc)
         if not loc_valid:
-            skip_counts["location_excluded"] += 1
-            print(f"[DEBUG] Rejected (Location outside target cities: '{clean_location}'): '{title}' @ {company}")
             continue
 
-        # Salary Extraction / Estimation via Gemini 3.6 Flash
+        # Salary check
         passes_sal, salary_range = get_salary_range_and_check(
             title=title,
             company=company,
             location=clean_location,
             description=desc,
             tier=loc_tier,
-            min_sal=min_sal,
-            max_sal=max_sal
+            min_sal=job.get('min_amount'),
+            max_sal=job.get('max_amount')
         )
-
         if not passes_sal:
-            skip_counts["salary_check"] += 1
-            print(f"[DEBUG] Rejected (Below Minimum Floor): '{title}' @ {company}")
             continue
 
-        exp_str = f"{min_exp}+ Years" if min_exp else "2–5 Years / Unspecified"
+        # Generate custom kit with exact scoring & experience detection
+        kit = generate_application_kit(title, company, desc)
+        if not kit:
+            continue
 
-        qualified_jobs.append({
-            "title": title,
-            "company": company,
-            "location": clean_location,
-            "tier": loc_tier,
-            "exp_detected": exp_str,
-            "url": url,
-            "salary_range": salary_range,
-            "desc": desc
-        })
+        # Check experience ceiling
+        if kit.get("exceeds_cap", False):
+            print(f"[DEBUG] Skipped '{title}' @ {company} (Experience required > {MAX_EXPERIENCE_CAP} years)")
+            continue
 
-    print(f"[DEBUG] Total high-relevance qualified candidates: {len(qualified_jobs)}")
-
-    dispatch_queue = qualified_jobs[:10]
-    dispatched = 0
-
-    for qualified in dispatch_queue:
-        kit = generate_application_kit(qualified["title"], qualified["company"], qualified["desc"])
-
-        safe_company = re.sub(r'[^a-zA-Z0-9]', '_', qualified["company"])[:15]
-        safe_title = re.sub(r'[^a-zA-Z0-9]', '_', qualified["title"])[:15]
+        safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:15]
+        safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)[:15]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         resume_filename = f"Resume_{safe_company}_{safe_title}_{timestamp}.pdf"
@@ -763,56 +851,31 @@ def run():
         cl_path = os.path.join(DOCS_DIR, cl_filename)
 
         create_dense_resume(resume_path, kit)
-        create_dense_cover_letter(cl_path, qualified["title"], qualified["company"], kit)
+        create_dense_cover_letter(cl_path, title, company, kit)
 
         resume_link = github_raw_link(resume_path)
         cl_link = github_raw_link(cl_path)
+        exp_text = kit.get("detected_experience", "2–5 Years")
 
         send_telegram_alert(
-            title=qualified["title"],
-            company=qualified["company"],
-            location=qualified["location"],
-            exp_detected=qualified["exp_detected"],
-            url=qualified["url"],
-            salary_range=qualified["salary_range"],
+            title=title,
+            company=company,
+            location=clean_location,
+            exp_detected=exp_text,
+            salary_range=salary_range,
             kit=kit,
             resume_link=resume_link,
-            cl_link=cl_link
+            cl_link=cl_link,
+            job_url=url
         )
 
-        log_job(
-            title=qualified["title"],
-            company=qualified["company"],
-            salary_range=qualified["salary_range"],
-            fit_score=kit.get("match_score"),
-            location=qualified["location"],
-            resume_link=resume_link,
-            cover_letter_link=cl_link,
-            job_link=qualified["url"]
-        )
-
-        append_to_log(
-            title=qualified["title"],
-            company=qualified["company"],
-            salary_range=qualified["salary_range"],
-            fit_score=kit.get("match_score"),
-            location=qualified["location"],
-            resume_link=resume_link,
-            cover_letter_link=cl_link,
-            job_link=qualified["url"]
-        )
+        log_job(title, company, salary_range, kit.get("match_score"), clean_location, resume_link, cl_link, url)
+        append_to_log(title, company, salary_range, kit.get("match_score"), clean_location, resume_link, cl_link, url)
 
         dispatched += 1
-        print(f"Dispatched alert for: {qualified['title']} at {qualified['company']} [{qualified['location']}]")
+        print(f"Successfully processed & notified: {title} at {company}")
 
-    print(
-        f"\n[DEBUG] Run summary — Dispatched: {dispatched} | "
-        f"Qualified Found: {len(qualified_jobs)} | "
-        f"Skipped high exp: {skip_counts['exp_too_high']} | "
-        f"Skipped location excluded: {skip_counts['location_excluded']} | "
-        f"Skipped below salary floor: {skip_counts['salary_check']} | "
-        f"Skipped non-target/skill mismatch: {skip_counts['skill_or_role_mismatch']}"
-    )
+    print(f"\n[DEBUG] Finished run. Dispatched {dispatched} matched applications.")
 
 
 if __name__ == "__main__":
