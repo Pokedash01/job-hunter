@@ -1,0 +1,18 @@
+name: Clear All Caches
+
+on:
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
+
+permissions:
+  actions: write # Required to delete caches
+
+jobs:
+  clear-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clear caches
+        run: |
+          gh extension install actions/gh-actions-cache
+          gh actions-cache delete --all
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
