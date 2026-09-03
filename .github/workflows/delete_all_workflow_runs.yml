@@ -1,0 +1,22 @@
+name: Delete All Workflow Runs
+on: workflow_dispatch
+
+permissions:
+  actions: write
+
+jobs:
+  delete-runs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge Completed Workflow Runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching and deleting old workflow runs..."
+          gh run list -R ${{ github.repository }} --limit 200 --json databaseId -q '.[].databaseId' | while read -r run_id; do
+            if [ -n "$run_id" ]; then
+              echo "Deleting run: $run_id"
+              gh run delete "$run_id" -R ${{ github.repository }} || true
+            fi
+          done
+          echo "All targeted workflow runs deleted."
