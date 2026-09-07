@@ -301,7 +301,11 @@ Job Title: {title}
 Company: {company}
 Location: {location}
 <<<<<<< HEAD
+<<<<<<< HEAD
 Job Description: {description[:2500]}
+=======
+Job Description: {description[:2200]}
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
 =======
 Job Description: {description[:2200]}
 >>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
@@ -413,7 +417,10 @@ def search_enterprise_ats_jobs():
                 ).strip()
                 company = extract_company_from_url(link)
 <<<<<<< HEAD
+<<<<<<< HEAD
 
+=======
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
 =======
 >>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
                 inferred_loc = extract_clean_location(snippet)
@@ -731,6 +738,7 @@ def create_dense_cover_letter(filepath, title, company, kit):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # ----------------- TELEGRAM DISPATCHER -----------------
 def send_telegram_alert(title, company, location, exp_detected, url, salary_range, kit, resume_link, cl_link):
     safe_title = title.replace("*", "").replace("_", " ")
@@ -756,6 +764,13 @@ def send_telegram_alert(title, company, location, exp_detected, salary_range, ki
     fit = kit.get("match_score", "N/A")
     gaps = kit.get("skills_gap", "None")
 
+=======
+# ----------------- TELEGRAM CARD DISPATCHER -----------------
+def send_telegram_alert(title, company, location, exp_detected, salary_range, kit, resume_link, cl_link, job_url):
+    fit = kit.get("match_score", "N/A")
+    gaps = kit.get("skills_gap", "None")
+
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
     msg = (
         f"🎯 <b>NEW HIGH-FIT OPPORTUNITY</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -772,6 +787,9 @@ def send_telegram_alert(title, company, location, exp_detected, salary_range, ki
         f"📝 <a href='{cl_link}'><b>Download Cover Letter (PDF)</b></a>\n"
         f"🔗 <a href='{job_url}'><b>Apply Directly on Portal</b></a>\n\n"
         f"<i>Note: PDF links go live shortly once pushed to GitHub repo.</i>"
+<<<<<<< HEAD
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
+=======
 >>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
     )
 
@@ -844,6 +862,7 @@ def run():
             continue
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         # Experience Cap Filtering
         min_exp = extract_min_experience(full_text)
         if min_exp is not None and min_exp > MAX_EXPERIENCE_CAP:
@@ -852,6 +871,9 @@ def run():
             continue
 
         # Location classification and fallback to job description
+=======
+        # Location check
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
 =======
         # Location check
 >>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
@@ -900,6 +922,7 @@ def run():
 
         send_telegram_alert(
 <<<<<<< HEAD
+<<<<<<< HEAD
             title=qualified["title"],
             company=qualified["company"],
             location=qualified["location"],
@@ -907,11 +930,16 @@ def run():
             url=qualified["url"],
             salary_range=qualified["salary_range"],
 =======
+=======
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
             title=title,
             company=company,
             location=clean_location,
             exp_detected=exp_text,
             salary_range=salary_range,
+<<<<<<< HEAD
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
+=======
 >>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
             kit=kit,
             resume_link=resume_link,
@@ -919,6 +947,7 @@ def run():
             job_url=url
         )
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         log_job(
             title=qualified["title"],
@@ -952,6 +981,14 @@ def run():
         print(f"Successfully processed & notified: {title} at {company}")
 >>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
 
+=======
+        log_job(title, company, salary_range, kit.get("match_score"), clean_location, resume_link, cl_link, url)
+        append_to_log(title, company, salary_range, kit.get("match_score"), clean_location, resume_link, cl_link, url)
+
+        dispatched += 1
+        print(f"Successfully processed & notified: {title} at {company}")
+
+>>>>>>> 8e9837d368bbe0b06bfb07e97bbd3163c5fbc2db
     print(f"\n[DEBUG] Finished run. Dispatched {dispatched} matched applications.")
 
 
